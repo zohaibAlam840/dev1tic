@@ -205,11 +205,7 @@ export default function DashboardPage() {
                     </div>
                  </div>
               </div>
-              <div className="p-6">
-                 <button className="w-full py-3 rounded-2xl bg-[#1A1A1A] text-white text-sm font-bold hover:bg-black transition-all">
-                    View Public Profile
-                 </button>
-              </div>
+
            </div>
         </div>
 
