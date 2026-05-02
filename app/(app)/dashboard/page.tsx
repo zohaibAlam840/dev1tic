@@ -45,9 +45,9 @@ export default function DashboardPage() {
     <div className="space-y-8">
 
       {/* Header section similar to reference */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-4xl font-bold text-[#1A1A1A] tracking-tight">Welcome in, Ali</h2>
+          <h2 className="text-2xl sm:text-4xl font-bold text-[#1A1A1A] tracking-tight">Welcome in, Ali</h2>
           <div className="flex items-center gap-4 mt-4">
              <div className="flex -space-x-2">
                 {[1,2,3].map(i => (
@@ -90,7 +90,7 @@ export default function DashboardPage() {
         {/* Progress / Chart Section */}
         <div className="lg:col-span-2 space-y-8">
            {/* Chart */}
-           <div className="bento-card p-8">
+           <div className="bento-card p-4 sm:p-8">
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <h3 className="text-lg font-bold text-[#1A1A1A]">Performance Over Time</h3>
@@ -107,7 +107,7 @@ export default function DashboardPage() {
                    </div>
                 </div>
               </div>
-              <div className="h-[280px] w-100%">
+              <div className="h-[220px] sm:h-[280px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={gmvData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                     <defs>

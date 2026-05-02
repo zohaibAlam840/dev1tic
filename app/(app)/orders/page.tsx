@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import clsx from "clsx";
 import {
   Upload, Search, Download, CheckCircle2, XCircle,
@@ -115,6 +115,8 @@ export default function OrdersPage() {
   const [compareResults, setCompareResults] = useState<CompareResult[]>([]);
   const [resultFilter, setResultFilter] = useState<"all"|"matched"|"not_in_system"|"not_in_csv">("all");
   const [csvMonth, setCsvMonth]         = useState("May 2026");
+  const [csvParseError, setCsvParseError] = useState<string | null>(null);
+  const [isDragging, setIsDragging]     = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const filtered = SYSTEM_ORDERS.filter(o => {
@@ -131,10 +133,88 @@ export default function OrdersPage() {
   };
   const totalComm = SYSTEM_ORDERS.filter(o=>o.status==="Paid").reduce((s,o)=>s+o.estComm,0);
 
-  function handleCSVUpload() {
-    // Simulate parsing — in production this reads the real file
+  function parseCSVText(text: string): CSVRow[] {
+    const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) throw new Error("CSV has no data rows.");
+
+    // Normalise header names to lowercase, strip quotes/spaces
+    const headers = lines[0].split(",").map(h => h.replace(/['"]/g, "").trim().toLowerCase());
+
+    // Flexible column mapping — TikTok Shop uses different header names per region
+    function col(row: string[], ...candidates: string[]): string {
+      for (const c of candidates) {
+        const idx = headers.indexOf(c);
+        if (idx !== -1 && row[idx] !== undefined) return row[idx].replace(/['"]/g, "").trim();
+      }
+      return "";
+    }
+
+    const rows: CSVRow[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      // Handle quoted fields with commas inside
+      const row = lines[i].match(/(".*?"|[^",]+|(?<=,)(?=,)|(?<=,)$|^(?=,))/g)
+                    ?.map(v => v.replace(/^"|"$/g, "").trim()) ?? lines[i].split(",");
+
+      const id = col(row, "order id", "orderid", "order_id", "id");
+      if (!id) continue; // skip blank rows
+
+      const product = col(row, "product name", "productname", "product_name", "item name", "sku name");
+      const dateRaw = col(row, "order create time", "order date", "date", "created at", "order_date");
+      const gmvRaw  = col(row, "gmv", "settlement amount", "order amount", "total amount", "commission base amount", "item price");
+      const commRaw = col(row, "estimated commission", "commission", "est. commission", "estimated_commission");
+
+      rows.push({
+        id,
+        product: product || "—",
+        date:    dateRaw  || "—",
+        gmv:     parseFloat(gmvRaw.replace(/[^0-9.]/g, ""))  || 0,
+        commission: parseFloat(commRaw.replace(/[^0-9.]/g, "")) || 0,
+      });
+    }
+    if (rows.length === 0) throw new Error("No valid order rows found. Check that your CSV contains an 'Order ID' column.");
+    return rows;
+  }
+
+  const processFile = useCallback((file: File) => {
+    setCsvParseError(null);
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setCsvParseError("Please upload a .csv file.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        const rows = parseCSVText(text);
+        setCsvRows(rows);
+        const results = runComparison(rows);
+        setCompareResults(results);
+        setCsvUploaded(true);
+      } catch (err: any) {
+        setCsvParseError(err.message ?? "Failed to parse CSV.");
+      }
+    };
+    reader.onerror = () => setCsvParseError("Could not read the file.");
+    reader.readAsText(file);
+  }, []);
+
+  function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+    e.target.value = ""; // allow re-selecting same file
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  }
+
+  function loadDemo() {
     const rows = MOCK_TIKTOK_CSV;
     setCsvRows(rows);
+    setCsvParseError(null);
     const results = runComparison(rows);
     setCompareResults(results);
     setCsvUploaded(true);
@@ -145,6 +225,7 @@ export default function OrdersPage() {
     setCsvRows([]);
     setCompareResults([]);
     setResultFilter("all");
+    setCsvParseError(null);
   }
 
   const filteredResults = compareResults.filter(r => resultFilter === "all" || r.result === resultFilter);
@@ -252,17 +333,31 @@ export default function OrdersPage() {
 
           {!csvUploaded ? (
             /* Upload area */
-            <div className="rounded-2xl border-2 border-dashed border-gray-300 bg-white p-10 text-center hover:border-violet-300 hover:bg-violet-50/30 transition-all">
-              <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCSVUpload} />
+            <div
+              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              className={clsx(
+                "rounded-2xl border-2 border-dashed bg-white p-10 text-center transition-all",
+                isDragging ? "border-violet-400 bg-violet-50/50 scale-[1.01]" : "border-gray-300 hover:border-violet-300 hover:bg-violet-50/30"
+              )}>
+              <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFileInputChange} />
               <div className="h-16 w-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                <FileSpreadsheet className="h-8 w-8 text-gray-400" />
+                <FileSpreadsheet className={clsx("h-8 w-8", isDragging ? "text-violet-500" : "text-gray-400")} />
               </div>
               <div className="text-base font-semibold text-gray-900 mb-1">Upload TikTok Orders CSV</div>
-              <p className="text-xs text-gray-500 mb-2">Export from TikTok Shop → Creator Center → Orders → Export CSV</p>
+              <p className="text-xs text-gray-500 mb-1">Export from TikTok Shop → Creator Center → Orders → Export CSV</p>
+              <p className="text-[10px] text-gray-400 mb-5">Supports all TikTok Shop CSV formats · one upload compares all order IDs instantly</p>
 
-              {/* Month picker */}
+              {csvParseError && (
+                <div className="mb-5 flex items-center gap-2 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 max-w-md mx-auto text-left">
+                  <X className="h-4 w-4 shrink-0" /> {csvParseError}
+                </div>
+              )}
+
+              {/* Month label */}
               <div className="flex items-center justify-center gap-2 mb-6">
-                <label className="text-xs text-gray-500">CSV Period:</label>
+                <label className="text-xs text-gray-500">CSV Period label:</label>
                 <input
                   type="text"
                   value={csvMonth}
@@ -272,16 +367,18 @@ export default function OrdersPage() {
                 />
               </div>
 
-              <div className="flex items-center justify-center gap-3">
+              <div className="flex items-center justify-center gap-3 flex-wrap">
                 <button
-                  onClick={handleCSVUpload}
+                  onClick={() => fileRef.current?.click()}
                   className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-500 px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-sm shadow-violet-200"
                 >
-                  <Upload className="h-4 w-4" /> Select CSV File
+                  <Upload className="h-4 w-4" /> Choose CSV File
                 </button>
-                <span className="text-xs text-gray-400">or drag and drop</span>
+                <span className="text-xs text-gray-400">or drag &amp; drop here</span>
               </div>
-              <p className="text-[10px] text-gray-400 mt-4">Demo: clicking the button will load a sample CSV for preview</p>
+              <button onClick={loadDemo} className="mt-4 text-[10px] text-gray-400 underline hover:text-gray-600 transition-colors">
+                Load sample data instead
+              </button>
             </div>
           ) : (
             /* Results */
@@ -355,31 +452,34 @@ export default function OrdersPage() {
                   <span className="ml-auto text-xs text-gray-400">{filteredResults.length} rows</span>
                 </div>
 
-                <div className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1fr] gap-4 px-5 py-3 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                  <div>Order ID</div><div>Product</div><div>Date</div><div>Commission</div><div>Result</div>
-                </div>
-
-                {filteredResults.length===0 ? (
-                  <div className="py-12 text-center text-sm text-gray-400">No results in this category</div>
-                ) : filteredResults.map(r => {
-                  const Icon = RESULT_ICONS[r.result];
-                  return (
-                    <div key={r.id+r.result} className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1fr] gap-4 px-5 py-4 border-b border-gray-100 hover:bg-gray-50 transition-all items-center last:border-0">
-                      <div className="text-xs font-mono text-violet-600 font-semibold">{r.id}</div>
-                      <div className="text-sm text-gray-900 truncate">{r.product}</div>
-                      <div className="text-xs text-gray-500">{r.date}</div>
-                      <div className="text-sm font-semibold text-emerald-600">
-                        +${(r.commission ?? r.estComm ?? 0).toFixed(2)}
-                      </div>
-                      <div>
-                        <span className={clsx("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium", RESULT_STYLES[r.result])}>
-                          <Icon className="h-3 w-3" />
-                          {RESULT_LABELS[r.result]}
-                        </span>
-                      </div>
+                <div className="overflow-x-auto">
+                  <div className="min-w-[520px]">
+                    <div className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1fr] gap-4 px-5 py-3 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                      <div>Order ID</div><div>Product</div><div>Date</div><div>Commission</div><div>Result</div>
                     </div>
-                  );
-                })}
+                    {filteredResults.length===0 ? (
+                      <div className="py-12 text-center text-sm text-gray-400">No results in this category</div>
+                    ) : filteredResults.map(r => {
+                      const Icon = RESULT_ICONS[r.result];
+                      return (
+                        <div key={r.id+r.result} className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1fr] gap-4 px-5 py-4 border-b border-gray-100 hover:bg-gray-50 transition-all items-center last:border-0">
+                          <div className="text-xs font-mono text-violet-600 font-semibold">{r.id}</div>
+                          <div className="text-sm text-gray-900 truncate">{r.product}</div>
+                          <div className="text-xs text-gray-500">{r.date}</div>
+                          <div className="text-sm font-semibold text-emerald-600">
+                            +${(r.commission ?? r.estComm ?? 0).toFixed(2)}
+                          </div>
+                          <div>
+                            <span className={clsx("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium", RESULT_STYLES[r.result])}>
+                              <Icon className="h-3 w-3" />
+                              <span className="hidden sm:inline">{RESULT_LABELS[r.result]}</span>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -413,33 +513,37 @@ export default function OrdersPage() {
 
           {/* Table */}
           <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1.2fr_40px] gap-4 px-5 py-3 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-              <div>Order ID</div><div>Product</div><div>Comm. Base</div><div>Est. Comm.</div><div>Status</div><div/>
-            </div>
-            {filtered.length===0 ? (
-              <div className="py-16 text-center text-sm text-gray-400">No orders found</div>
-            ) : filtered.map(o=>{
-              const Icon = STATUS_ICONS[o.status];
-              return (
-                <div key={o.id} className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1.2fr_40px] gap-4 px-5 py-4 border-b border-gray-100 hover:bg-gray-50 transition-all items-center last:border-0">
-                  <div className="text-xs font-mono text-violet-600 font-semibold">{o.id}</div>
-                  <div>
-                    <div className="text-sm text-gray-900">{o.product}</div>
-                    <div className="text-xs text-gray-400">{o.date}</div>
-                  </div>
-                  <div className="text-sm text-gray-700">${o.commBase.toFixed(2)}</div>
-                  <div className="text-sm font-semibold text-emerald-600">+${o.estComm.toFixed(2)}</div>
-                  <div>
-                    <span className={clsx("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium", STATUS_STYLES[o.status])}>
-                      <Icon className="h-3 w-3" />{o.status}
-                    </span>
-                  </div>
-                  <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-                    <ChevronDown className="h-4 w-4 text-gray-400" />
-                  </button>
+            <div className="overflow-x-auto">
+              <div className="min-w-[600px]">
+                <div className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1.2fr_40px] gap-4 px-5 py-3 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                  <div>Order ID</div><div>Product</div><div>Comm. Base</div><div>Est. Comm.</div><div>Status</div><div/>
                 </div>
-              );
-            })}
+                {filtered.length===0 ? (
+                  <div className="py-16 text-center text-sm text-gray-400">No orders found</div>
+                ) : filtered.map(o=>{
+                  const Icon = STATUS_ICONS[o.status];
+                  return (
+                    <div key={o.id} className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1.2fr_40px] gap-4 px-5 py-4 border-b border-gray-100 hover:bg-gray-50 transition-all items-center last:border-0">
+                      <div className="text-xs font-mono text-violet-600 font-semibold">{o.id}</div>
+                      <div>
+                        <div className="text-sm text-gray-900">{o.product}</div>
+                        <div className="text-xs text-gray-400">{o.date}</div>
+                      </div>
+                      <div className="text-sm text-gray-700">${o.commBase.toFixed(2)}</div>
+                      <div className="text-sm font-semibold text-emerald-600">+${o.estComm.toFixed(2)}</div>
+                      <div>
+                        <span className={clsx("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium", STATUS_STYLES[o.status])}>
+                          <Icon className="h-3 w-3" />{o.status}
+                        </span>
+                      </div>
+                      <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                        <ChevronDown className="h-4 w-4 text-gray-400" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Totals */}

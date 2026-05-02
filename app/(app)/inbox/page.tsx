@@ -45,7 +45,7 @@ export default function InboxPage() {
   const selectedMsg = MESSAGES.find((m) => m.id === selected);
 
   return (
-    <div className="flex h-[calc(100vh-140px)] gap-6">
+    <div className="flex h-[calc(100dvh-180px)] lg:h-[calc(100vh-130px)] gap-4 sm:gap-6">
       {/* List panel */}
       <div className={clsx("flex flex-col bento-card overflow-hidden", selected ? "hidden lg:flex lg:w-[400px]" : "flex-1")}>
         <div className="p-6 border-b border-[#E9E9E2] space-y-4">
@@ -126,7 +126,7 @@ export default function InboxPage() {
       {/* Detail panel */}
       {selected && selectedMsg ? (
         <div className="flex-1 flex flex-col bento-card overflow-hidden">
-          <div className="flex items-center justify-between px-8 py-6 border-b border-[#E9E9E2]">
+          <div className="flex items-center justify-between px-4 sm:px-8 py-4 sm:py-6 border-b border-[#E9E9E2]">
             <button onClick={() => setSelected(null)} className="lg:hidden flex items-center gap-2 text-sm font-bold text-[#1A1A1A]">
               <X className="h-5 w-5" /> Back
             </button>
@@ -137,10 +137,10 @@ export default function InboxPage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-8 space-y-8">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-5 sm:space-y-8">
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="text-2xl font-bold text-[#1A1A1A] mb-2">{selectedMsg.subject}</h3>
+                <h3 className="text-lg sm:text-2xl font-bold text-[#1A1A1A] mb-2">{selectedMsg.subject}</h3>
                 <div className="flex items-center gap-2 text-sm font-medium">
                    <span className="text-gray-400 font-bold">From:</span>
                    <span className="text-[#1A1A1A] font-bold bg-[#FFD567]/20 px-2 py-0.5 rounded-lg">{selectedMsg.from}</span>
@@ -183,7 +183,7 @@ export default function InboxPage() {
             )}
           </div>
 
-          <div className="p-6 border-t border-[#E9E9E2] bg-white flex items-center justify-center gap-4">
+          <div className="p-3 sm:p-6 border-t border-[#E9E9E2] bg-white flex items-center justify-center gap-3">
             <button className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-[#1A1A1A] py-4 text-sm font-bold text-white hover:bg-black transition-all shadow-lg shadow-black/10">
               <Reply className="h-4 w-4" /> Send Reply
             </button>

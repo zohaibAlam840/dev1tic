@@ -144,20 +144,24 @@ export default function AnalyticsPage() {
           <div className="text-sm font-semibold text-gray-900">Top Products</div>
           <div className="text-xs text-gray-400">Last 7 days</div>
         </div>
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 px-5 py-3 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-          <div>Product</div><div>Attr. GMV</div><div>Items</div><div>Est. Comm.</div>
-        </div>
-        {TOP_PRODUCTS.map((p,i)=>(
-          <div key={p.name} className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 px-5 py-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-all items-center">
-            <div className="flex items-center gap-3">
-              <div className="h-6 w-6 rounded-lg bg-violet-100 flex items-center justify-center text-[10px] font-bold text-violet-700">{i+1}</div>
-              <span className="text-sm text-gray-900">{p.name}</span>
+        <div className="overflow-x-auto">
+          <div className="min-w-[420px]">
+            <div className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 px-5 py-3 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+              <div>Product</div><div>Attr. GMV</div><div>Items</div><div>Est. Comm.</div>
             </div>
-            <div className="text-sm font-semibold text-gray-900">${p.gmv.toLocaleString()}</div>
-            <div className="text-sm text-gray-600">{p.items}</div>
-            <div className="text-sm font-semibold text-emerald-600">+${p.commission}</div>
+            {TOP_PRODUCTS.map((p,i)=>(
+              <div key={p.name} className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 px-5 py-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-all items-center">
+                <div className="flex items-center gap-3">
+                  <div className="h-6 w-6 shrink-0 rounded-lg bg-violet-100 flex items-center justify-center text-[10px] font-bold text-violet-700">{i+1}</div>
+                  <span className="text-sm text-gray-900 truncate">{p.name}</span>
+                </div>
+                <div className="text-sm font-semibold text-gray-900">${p.gmv.toLocaleString()}</div>
+                <div className="text-sm text-gray-600">{p.items}</div>
+                <div className="text-sm font-semibold text-emerald-600">+${p.commission}</div>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );

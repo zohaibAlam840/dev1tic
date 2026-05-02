@@ -37,7 +37,8 @@ export default function CollabsPage() {
 
   const filtered = COLLABS.filter((c) => {
     if (stageFilter !== "All" && c.stage !== stageFilter) return false;
-    if (search && !c.brand.toLowerCase().includes(search.toLowerCase()) && !c.product.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !c.brand.toLowerCase().includes(search.toLowerCase()) &&
+        !c.product.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -45,9 +46,9 @@ export default function CollabsPage() {
   const pendingPay  = COLLABS.filter(c => c.stage === "Awaiting Payment").reduce((s,c) => s + c.value, 0);
 
   return (
-    <div className="space-y-8">
-      {/* Stats - New Bento Style */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+    <div className="space-y-5 sm:space-y-8">
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-5">
         {[
           { label:"Pipeline",  value:`$${totalValue.toLocaleString()}`, icon: DollarSign, bg:"bg-white" },
           { label:"Pending",   value:`$${pendingPay.toLocaleString()}`, icon: Calendar,   bg:"bg-[#FFD567]" },
@@ -67,66 +68,76 @@ export default function CollabsPage() {
       </div>
 
       {/* Controls */}
-      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
-         <div className="relative w-full lg:w-96">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input 
-              value={search} 
-              onChange={e=>setSearch(e.target.value)} 
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
               placeholder="Search brand or product..."
-              className="w-full rounded-2xl border border-[#E9E9E2] bg-white pl-11 pr-4 py-3 text-sm text-[#1A1A1A] placeholder-gray-400 outline-none focus:border-[#FFD567] transition-all shadow-sm" 
+              className="w-full rounded-2xl border border-[#E9E9E2] bg-white pl-10 pr-4 py-2.5 text-sm text-[#1A1A1A] placeholder-gray-400 outline-none focus:border-[#FFD567] transition-all shadow-sm"
             />
-         </div>
-         
-         <div className="flex items-center gap-3 w-full lg:w-auto">
-            <div className="flex bg-white rounded-2xl border border-[#E9E9E2] p-1 shadow-sm">
-               <button onClick={()=>setView("list")} className={clsx("p-2 rounded-xl transition-all", view==="list" ? "bg-[#1A1A1A] text-white" : "text-gray-400 hover:text-[#1A1A1A]")}>
-                  <List className="h-4 w-4" />
-               </button>
-               <button onClick={()=>setView("board")} className={clsx("p-2 rounded-xl transition-all", view==="board" ? "bg-[#1A1A1A] text-white" : "text-gray-400 hover:text-[#1A1A1A]")}>
-                  <LayoutGrid className="h-4 w-4" />
-               </button>
-            </div>
-            <button className="flex-1 lg:flex-none flex items-center justify-center gap-2 rounded-2xl bg-[#FFD567] px-6 py-3 text-sm font-bold text-[#1A1A1A] hover:opacity-90 transition-all shadow-sm">
-               <Plus className="h-4 w-4" /> Create New
+          </div>
+          <div className="flex bg-white rounded-2xl border border-[#E9E9E2] p-1 shadow-sm shrink-0">
+            <button onClick={() => setView("list")} className={clsx("p-2 rounded-xl transition-all", view === "list" ? "bg-[#1A1A1A] text-white" : "text-gray-400 hover:text-[#1A1A1A]")}>
+              <List className="h-4 w-4" />
             </button>
-         </div>
+            <button onClick={() => setView("board")} className={clsx("p-2 rounded-xl transition-all", view === "board" ? "bg-[#1A1A1A] text-white" : "text-gray-400 hover:text-[#1A1A1A]")}>
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+          </div>
+          <button className="flex items-center justify-center gap-2 rounded-2xl bg-[#FFD567] px-4 py-2.5 text-sm font-bold text-[#1A1A1A] hover:opacity-90 active:scale-95 transition-all shadow-sm shrink-0">
+            <Plus className="h-4 w-4" /><span className="hidden sm:inline">Create New</span>
+          </button>
+        </div>
+        {/* Stage filter chips */}
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {["All", ...STAGES.slice(0, 6)].map(s => (
+            <button key={s} onClick={() => setStageFilter(s)}
+              className={clsx("shrink-0 rounded-xl px-3 py-1.5 text-xs font-bold transition-all active:scale-95",
+                stageFilter === s ? "bg-[#1A1A1A] text-white" : "bg-white border border-[#E9E9E2] text-gray-500 hover:border-[#1A1A1A]"
+              )}>
+              {s}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Main View Area */}
       <div className="bento-card overflow-hidden">
         {view === "list" ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[560px]">
               <thead>
                 <tr className="border-b border-[#E9E9E2] bg-[#F7F7F2]/50">
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Brand & Product</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Stage</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Value</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Due Date</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Action</th>
+                  <th className="px-4 sm:px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Brand & Product</th>
+                  <th className="px-4 sm:px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Stage</th>
+                  <th className="px-4 sm:px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Value</th>
+                  <th className="hidden sm:table-cell px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Due Date</th>
+                  <th className="px-4 sm:px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(c => (
                   <tr key={c.id} className="border-b border-[#E9E9E2] hover:bg-[#F7F7F2]/30 transition-all group">
-                    <td className="px-6 py-5">
+                    <td className="px-4 sm:px-6 py-4">
                        <div className="text-sm font-bold text-[#1A1A1A]">{c.brand}</div>
                        <div className="text-xs text-gray-400 font-medium">{c.product}</div>
                     </td>
-                    <td className="px-6 py-5">
-                       <span className={clsx("rounded-full px-3 py-1 text-[10px] font-bold border uppercase tracking-wider", STAGE_STYLES[c.stage])}>
+                    <td className="px-4 sm:px-6 py-4">
+                       <span className={clsx("rounded-full px-2.5 py-1 text-[9px] font-bold border uppercase tracking-wider whitespace-nowrap", STAGE_STYLES[c.stage])}>
                           {c.stage}
                        </span>
                     </td>
-                    <td className="px-6 py-5">
+                    <td className="px-4 sm:px-6 py-4">
                        <div className="text-sm font-bold text-[#1A1A1A]">${c.value.toLocaleString()}</div>
-                       <div className="text-[10px] text-gray-400 font-bold">{c.commission}% Commission</div>
+                       <div className="text-[10px] text-gray-400 font-bold">{c.commission}% comm.</div>
                     </td>
-                    <td className="px-6 py-5 text-sm font-medium text-gray-600">
+                    <td className="hidden sm:table-cell px-6 py-4 text-sm font-medium text-gray-600 whitespace-nowrap">
                        {c.dueDate}
                     </td>
-                    <td className="px-6 py-5">
+                    <td className="px-4 sm:px-6 py-4">
                        <button className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-[#1A1A1A] transition-all">
                           <MoreHorizontal className="h-4 w-4" />
                        </button>
