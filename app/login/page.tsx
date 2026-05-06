@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
@@ -21,7 +21,7 @@ const RESET_ERROR_MESSAGES: Record<string, string> = {
   "auth/too-many-requests": "Too many attempts. Please try again later.",
 };
 
-export default function LoginPage() {
+function LoginContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const redirectTo   = searchParams.get("from") ?? "/dashboard";
@@ -273,5 +273,17 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#F7F7F2] flex items-center justify-center">
+        <div className="h-8 w-8 rounded-full border-4 border-[#1A1A1A]/10 border-t-[#1A1A1A] animate-spin" />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }
