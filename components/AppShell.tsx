@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
+import { useAuth } from "@/lib/auth-context";
 import {
   TrendingUp, Mail, Zap, ShoppingBag, BarChart3, Star,
   Settings, Shield, Bell, Menu, X, LogOut, Plus,
@@ -18,11 +19,11 @@ const NAV = [
   { href: "/samples",   icon: Star,            label: "Samples" },
 ];
 
-const MORE = [
+const MORE_BASE = [
   { href: "/csv-check", icon: FileSpreadsheet, label: "CSV Check" },
   { href: "/settings",  icon: Settings,        label: "Settings" },
-  { href: "/admin",     icon: Shield,          label: "Admin" },
 ];
+const ADMIN_ITEM = { href: "/admin", icon: Shield, label: "Admin" };
 
 // Bottom tabs: 4 core + a "More" button that opens the sidebar
 const MOBILE_TABS = NAV.slice(0, 4);
@@ -59,9 +60,16 @@ function NavItem({ href, icon: Icon, label, badge, onClick }: {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const pathname = usePathname();
-  const allNav = [...NAV, ...MORE];
+  const pathname  = usePathname();
+  const { profile, signOut } = useAuth();
+  const isAdmin   = profile?.role === "admin";
+  const MORE      = isAdmin ? [...MORE_BASE, ADMIN_ITEM] : MORE_BASE;
+  const allNav    = [...NAV, ...MORE];
   const pageTitle = allNav.find((n) => pathname === n.href || pathname.startsWith(n.href + "/"))?.label ?? "Dashboard";
+
+  const displayName   = profile?.name ?? "User";
+  const displayInitial = displayName.charAt(0).toUpperCase();
+  const displayEmail   = profile?.email ?? "";
 
   return (
     <div className="h-full flex bg-[#F7F7F2] font-sans">
@@ -113,16 +121,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* User footer */}
         <div className="px-4 py-5 border-t border-[#E9E9E2]">
-          <div className="flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-gray-50 cursor-pointer transition-all group active:scale-95">
+          <button onClick={signOut} className="w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-gray-50 cursor-pointer transition-all group active:scale-95">
             <div className="h-9 w-9 rounded-full bg-[#FFD567] flex items-center justify-center text-[#1A1A1A] text-xs font-bold shrink-0 border-2 border-white shadow-sm">
-              A
+              {displayInitial}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-bold text-[#1A1A1A] truncate">Ali Creator</div>
-              <div className="text-[11px] text-gray-400 truncate font-medium">ali@creator.com</div>
+            <div className="flex-1 min-w-0 text-left">
+              <div className="text-sm font-bold text-[#1A1A1A] truncate">{displayName}</div>
+              <div className="text-[11px] text-gray-400 truncate font-medium">{displayEmail}</div>
             </div>
             <LogOut className="h-4 w-4 text-gray-300 group-hover:text-red-400 shrink-0 transition-colors" />
-          </div>
+          </button>
         </div>
       </aside>
 
@@ -147,9 +155,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
             <button className="hidden sm:flex items-center gap-2 rounded-full border border-[#E9E9E2] bg-white px-3 py-1.5 hover:bg-gray-50 transition-all shadow-sm active:scale-95">
               <div className="h-7 w-7 rounded-full bg-[#FFD567] flex items-center justify-center text-[#1A1A1A] text-[10px] font-bold">
-                A
+                {displayInitial}
               </div>
-              <span className="text-sm text-[#1A1A1A] font-bold">Ali</span>
+              <span className="text-sm text-[#1A1A1A] font-bold">{displayName.split(" ")[0]}</span>
             </button>
           </div>
         </header>

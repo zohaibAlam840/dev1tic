@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertTriangle, Package, Calendar, User,
 } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/lib/auth-context";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -41,13 +42,26 @@ const ACTIVITY = [
 ];
 
 export default function DashboardPage() {
+  const { profile } = useAuth();
+  const firstName   = profile?.name?.split(" ")[0] ?? "there";
+  const isAdmin     = profile?.role === "admin";
+
   return (
     <div className="space-y-8">
 
-      {/* Header section similar to reference */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-4xl font-bold text-[#1A1A1A] tracking-tight">Welcome in, Ali</h2>
+          <div className="flex items-center gap-2 mb-2">
+            <h2 className="text-2xl sm:text-4xl font-bold text-[#1A1A1A] tracking-tight">
+              Welcome, {firstName}
+            </h2>
+            {isAdmin && (
+              <span className="rounded-full bg-[#1A1A1A] px-3 py-1 text-[10px] font-bold text-[#FFD567] uppercase tracking-wider">
+                Admin
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-4 mt-4">
              <div className="flex -space-x-2">
                 {[1,2,3].map(i => (
