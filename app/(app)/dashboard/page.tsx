@@ -1,10 +1,13 @@
 "use client";
+import { useEffect, useState } from "react";
 import {
   TrendingUp, TrendingDown, DollarSign, ShoppingBag,
   Zap, Star, Eye, MousePointer, ArrowRight, Clock,
-  CheckCircle2, AlertTriangle, Package, Calendar, User,
+  CheckCircle2, AlertTriangle, Package, Calendar, Shield,
 } from "lucide-react";
 import Link from "next/link";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -42,12 +45,49 @@ const ACTIVITY = [
 ];
 
 export default function DashboardPage() {
-  const { profile } = useAuth();
-  const firstName   = profile?.name?.split(" ")[0] ?? "there";
-  const isAdmin     = profile?.role === "admin";
+  const { profile }                         = useAuth();
+  const firstName                           = profile?.name?.split(" ")[0] ?? "there";
+  const isAdmin                             = profile?.role === "admin";
+  const [workspaceName, setWorkspaceName]   = useState<string | null>(null);
+  const [ownerName,     setOwnerName]       = useState<string | null>(null);
+
+  // For creators: fetch workspace name + owner from the account doc
+  useEffect(() => {
+    if (!profile || profile.role === "admin" || !profile.accountId) return;
+    (async () => {
+      const accountSnap = await getDoc(doc(db, "accounts", profile.accountId));
+      if (!accountSnap.exists()) return;
+      const { name: wName, ownerUid } = accountSnap.data();
+      setWorkspaceName(wName);
+      if (ownerUid) {
+        const ownerSnap = await getDoc(doc(db, "users", ownerUid));
+        if (ownerSnap.exists()) setOwnerName(ownerSnap.data().name);
+      }
+    })();
+  }, [profile]);
 
   return (
     <div className="space-y-8">
+
+      {/* Workspace banner — only shown to invited creators */}
+      {!isAdmin && ownerName && (
+        <div className="flex items-center gap-3 rounded-2xl border border-[#E9E9E2] bg-white px-5 py-3.5 shadow-sm">
+          <div className="h-8 w-8 rounded-xl bg-[#1A1A1A] flex items-center justify-center shrink-0">
+            <Shield className="h-4 w-4 text-[#FFD567]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-gray-400 font-medium">
+              You&apos;re working in{" "}
+              <span className="font-bold text-[#1A1A1A]">{workspaceName ?? "a workspace"}</span>
+              {" "}managed by{" "}
+              <span className="font-bold text-[#1A1A1A]">{ownerName}</span>
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-[#FFD567]/20 border border-[#FFD567]/40 px-3 py-1 text-[10px] font-bold text-[#1A1A1A] uppercase tracking-wider">
+            Creator
+          </span>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">

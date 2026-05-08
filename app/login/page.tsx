@@ -103,12 +103,16 @@ function LoginContent() {
           </div>
           <span className="text-base font-bold text-[#1A1A1A]">Crextio</span>
         </Link>
-        <p className="text-sm text-gray-400">
-          No account?{" "}
+        <div className="flex items-center gap-4 text-sm text-gray-400">
+          <Link href="/join" className="flex items-center gap-1.5 font-bold text-[#1A1A1A] hover:underline">
+            <span className="h-2 w-2 rounded-full bg-[#FFD567] inline-block" />
+            Been invited?
+          </Link>
+          <span>·</span>
           <Link href="/signup" className="font-bold text-[#1A1A1A] hover:underline">
             Sign up free
           </Link>
-        </p>
+        </div>
       </header>
 
       {/* Card */}

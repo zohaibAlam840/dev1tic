@@ -8,10 +8,21 @@ import {
   X, Mail, User, CheckCircle, Send, Clock,
   Lock, Eye, EyeOff,
 } from "lucide-react";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 
+type Creator = {
+  uid: string;
+  name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  createdAt: string;
+};
+
 // ── Invite Modal ──────────────────────────────────────────────────────────────
-function InviteModal({ onClose }: { onClose: () => void }) {
+function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited?: () => void }) {
   const [name,      setName]      = useState("");
   const [email,     setEmail]     = useState("");
   const [password,  setPassword]  = useState("");
@@ -34,6 +45,7 @@ function InviteModal({ onClose }: { onClose: () => void }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to invite user.");
+      onInvited?.();
       setDone(true);
     } catch (err: any) {
       setError(err.message);
@@ -200,14 +212,39 @@ type AdminTab = "overview" | "creators" | "alerts" | "collabs";
 export default function AdminPage() {
   const { profile, loading } = useAuth();
   const router = useRouter();
-  const [tab,         setTab]         = useState<AdminTab>("creators");
-  const [inviteOpen,  setInviteOpen]  = useState(false);
+  const [tab,             setTab]             = useState<AdminTab>("creators");
+  const [inviteOpen,      setInviteOpen]      = useState(false);
+  const [creators,        setCreators]        = useState<Creator[]>([]);
+  const [creatorsLoading, setCreatorsLoading] = useState(false);
+  const [refreshKey,      setRefreshKey]      = useState(0);
 
   useEffect(() => {
     if (!loading && profile?.role !== "admin") {
       router.replace("/dashboard");
     }
   }, [loading, profile, router]);
+
+  useEffect(() => {
+    if (!profile?.accountId) return;
+    setCreatorsLoading(true);
+    (async () => {
+      try {
+        const snap = await getDocs(
+          query(collection(db, "users"), where("accountId", "==", profile.accountId))
+        );
+        const list: Creator[] = [];
+        snap.forEach(d => {
+          if (d.id !== profile.uid) {
+            list.push({ uid: d.id, ...(d.data() as Omit<Creator, "uid">) });
+          }
+        });
+        list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        setCreators(list);
+      } finally {
+        setCreatorsLoading(false);
+      }
+    })();
+  }, [profile?.accountId, profile?.uid, refreshKey]);
 
   if (loading || profile?.role !== "admin") {
     return (
@@ -220,7 +257,12 @@ export default function AdminPage() {
   return (
     <div className="p-5 lg:p-7 space-y-6">
 
-      {inviteOpen && <InviteModal onClose={() => setInviteOpen(false)} />}
+      {inviteOpen && (
+        <InviteModal
+          onClose={() => setInviteOpen(false)}
+          onInvited={() => setRefreshKey(k => k + 1)}
+        />
+      )}
 
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -286,21 +328,79 @@ export default function AdminPage() {
       {/* ── CREATORS TAB ── */}
       {tab === "creators" && (
         <div className="bento-card">
-          <div className="flex flex-col items-center justify-center py-20 text-center px-6">
-            <div className="h-16 w-16 rounded-2xl bg-[#FFD567]/10 border border-[#FFD567]/30 flex items-center justify-center mb-5">
-              <Users className="h-7 w-7 text-[#1A1A1A]/30" />
+          {creatorsLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <span className="h-6 w-6 rounded-full border-2 border-[#FFD567] border-t-[#1A1A1A] animate-spin" />
             </div>
-            <h3 className="text-base font-bold text-[#1A1A1A] mb-2">No creators yet</h3>
-            <p className="text-sm text-gray-400 max-w-xs leading-relaxed mb-6">
-              Invite your first creator to your workspace. They&apos;ll get an email to set their password and log in.
-            </p>
-            <button
-              onClick={() => setInviteOpen(true)}
-              className="flex items-center gap-2 rounded-2xl bg-[#1A1A1A] px-6 py-3 text-sm font-bold text-white hover:bg-black active:scale-95 transition-all shadow-sm"
-            >
-              <UserPlus className="h-4 w-4" /> Invite first creator
-            </button>
-          </div>
+          ) : creators.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+              <div className="h-16 w-16 rounded-2xl bg-[#FFD567]/10 border border-[#FFD567]/30 flex items-center justify-center mb-5">
+                <Users className="h-7 w-7 text-[#1A1A1A]/30" />
+              </div>
+              <h3 className="text-base font-bold text-[#1A1A1A] mb-2">No creators yet</h3>
+              <p className="text-sm text-gray-400 max-w-xs leading-relaxed mb-6">
+                Invite your first creator to your workspace. They&apos;ll get an email with their login credentials.
+              </p>
+              <button
+                onClick={() => setInviteOpen(true)}
+                className="flex items-center gap-2 rounded-2xl bg-[#1A1A1A] px-6 py-3 text-sm font-bold text-white hover:bg-black active:scale-95 transition-all shadow-sm"
+              >
+                <UserPlus className="h-4 w-4" /> Invite first creator
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[#E9E9E2]">
+                <p className="text-sm font-bold text-[#1A1A1A]">{creators.length} member{creators.length !== 1 ? "s" : ""}</p>
+                <button
+                  onClick={() => setInviteOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-bold text-[#1A1A1A] hover:underline"
+                >
+                  <UserPlus className="h-3.5 w-3.5" /> Invite another
+                </button>
+              </div>
+              <div className="divide-y divide-[#E9E9E2]">
+                {creators.map(c => {
+                  const initials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                  const joined = c.createdAt
+                    ? new Date(c.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                    : "—";
+                  return (
+                    <div key={c.uid} className="flex items-center gap-4 px-6 py-4">
+                      <div className="h-10 w-10 rounded-full bg-[#FFD567] flex items-center justify-center shrink-0 text-sm font-bold text-[#1A1A1A]">
+                        {initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold text-[#1A1A1A] truncate">{c.name}</div>
+                        <div className="text-xs text-gray-400 truncate">{c.email}</div>
+                      </div>
+                      <div className="hidden sm:flex items-center gap-2 shrink-0">
+                        <span className={clsx(
+                          "rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider",
+                          c.role === "admin"
+                            ? "bg-[#1A1A1A] text-[#FFD567]"
+                            : "bg-[#FFD567]/20 border border-[#FFD567]/40 text-[#1A1A1A]"
+                        )}>
+                          {c.role}
+                        </span>
+                        <span className={clsx(
+                          "rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider",
+                          c.is_active !== false
+                            ? "bg-emerald-50 border border-emerald-100 text-emerald-700"
+                            : "bg-gray-100 border border-gray-200 text-gray-500"
+                        )}>
+                          {c.is_active !== false ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                      <div className="hidden md:block text-xs text-gray-400 shrink-0 w-28 text-right">
+                        Joined {joined}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
