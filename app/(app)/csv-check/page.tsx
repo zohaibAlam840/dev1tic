@@ -1,39 +1,16 @@
 "use client";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import Link from "next/link";
 import clsx from "clsx";
 import {
   Upload, FileSpreadsheet, CheckCheck, AlertCircle, HelpCircle,
-  AlertTriangle, X, Download, ArrowUpDown, RefreshCw,
+  AlertTriangle, X, Download, ArrowUpDown, RefreshCw, Loader2,
+  PackageSearch,
 } from "lucide-react";
 
-// These represent orders already in the system (in production: fetched from DB)
-const SYSTEM_ORDERS = [
-  { id: "ORD-8821", product: "Hydra Serum 50ml",       estComm: 3.36, date: "May 2" },
-  { id: "ORD-8822", product: "FitLife Protein 1kg",    estComm: 6.50, date: "May 2" },
-  { id: "ORD-8823", product: "StyleX Blazer",          estComm: 6.23, date: "May 2" },
-  { id: "ORD-8824", product: "NaturaPure Face Oil",    estComm: 4.56, date: "May 2" },
-  { id: "ORD-8825", product: "Hydra Serum 100ml",      estComm: 5.44, date: "May 3" },
-  { id: "ORD-8826", product: "VitaGlow Vitamin C",     estComm: 3.60, date: "May 3" },
-  { id: "ORD-8827", product: "EcoSkin Moisturizer",    estComm: 4.68, date: "May 3" },
-  { id: "ORD-8828", product: "LuxHair Shampoo",        estComm: 3.19, date: "May 3" },
-  { id: "ORD-8829", product: "FitLife BCAA",           estComm: 3.50, date: "May 4" },
-  { id: "ORD-8830", product: "BeautyBlend Foundation", estComm: 4.32, date: "May 4" },
-];
-
-const DEMO_CSV = [
-  { id: "ORD-8821", product: "Hydra Serum 50ml",    date: "2026-05-02", gmv: 42.00, commission: 3.36 },
-  { id: "ORD-8822", product: "FitLife Protein 1kg", date: "2026-05-02", gmv: 65.00, commission: 6.50 },
-  { id: "ORD-8823", product: "StyleX Blazer",       date: "2026-05-02", gmv: 89.00, commission: 6.23 },
-  { id: "ORD-8825", product: "Hydra Serum 100ml",   date: "2026-05-03", gmv: 68.00, commission: 5.44 },
-  { id: "ORD-8827", product: "EcoSkin Moisturizer", date: "2026-05-03", gmv: 52.00, commission: 4.68 },
-  { id: "ORD-8829", product: "FitLife BCAA",        date: "2026-05-04", gmv: 35.00, commission: 3.50 },
-  { id: "ORD-8831", product: "GlowUp Toner 200ml",  date: "2026-05-04", gmv: 55.00, commission: 4.40 },
-  { id: "ORD-8832", product: "StyleX Sneakers",     date: "2026-05-05", gmv: 120.00, commission: 8.40 },
-  { id: "ORD-8833", product: "NaturaPure Cleanser", date: "2026-05-05", gmv: 38.00, commission: 3.04 },
-];
-
-type CSVRow = { id: string; product: string; date: string; gmv: number; commission: number };
-type ResultType = "matched" | "not_in_system" | "not_in_csv";
+type SystemOrder = { id: string; product: string; estComm: number; date: string };
+type CSVRow      = { id: string; product: string; date: string; gmv: number; commission: number };
+type ResultType  = "matched" | "not_in_system" | "not_in_csv";
 type CompareResult = {
   id: string; product: string; date: string; result: ResultType;
   gmv?: number; commission?: number; estComm?: number;
@@ -51,10 +28,10 @@ const RESULT_LABELS: Record<ResultType, string> = {
   matched: "Matched", not_in_system: "Not in System", not_in_csv: "Not in CSV",
 };
 
-function runComparison(csvRows: CSVRow[]): CompareResult[] {
+function runComparison(csvRows: CSVRow[], systemOrders: SystemOrder[]): CompareResult[] {
   const results: CompareResult[] = [];
   const csvIds = new Set(csvRows.map(r => r.id));
-  const sysIds = new Set(SYSTEM_ORDERS.map(o => o.id));
+  const sysIds = new Set(systemOrders.map(o => o.id));
 
   for (const row of csvRows) {
     results.push({
@@ -63,9 +40,12 @@ function runComparison(csvRows: CSVRow[]): CompareResult[] {
       gmv: row.gmv, commission: row.commission,
     });
   }
-  for (const order of SYSTEM_ORDERS) {
+  for (const order of systemOrders) {
     if (!csvIds.has(order.id)) {
-      results.push({ id: order.id, product: order.product, date: order.date, result: "not_in_csv", estComm: order.estComm });
+      results.push({
+        id: order.id, product: order.product, date: order.date,
+        result: "not_in_csv", estComm: order.estComm,
+      });
     }
   }
   return results;
@@ -103,14 +83,36 @@ function parseCSVText(text: string): CSVRow[] {
 }
 
 export default function CSVCheckPage() {
-  const [csvUploaded, setCsvUploaded]     = useState(false);
-  const [csvRows, setCsvRows]             = useState<CSVRow[]>([]);
-  const [compareResults, setCompareResults] = useState<CompareResult[]>([]);
-  const [resultFilter, setResultFilter]   = useState<"all" | ResultType>("all");
-  const [parseError, setParseError]       = useState<string | null>(null);
-  const [isDragging, setIsDragging]       = useState(false);
-  const [csvLabel, setCsvLabel]           = useState("May 2026");
+  const [systemOrders,    setSystemOrders]    = useState<SystemOrder[]>([]);
+  const [loadingOrders,   setLoadingOrders]   = useState(true);
+  const [csvUploaded,     setCsvUploaded]     = useState(false);
+  const [csvRows,         setCsvRows]         = useState<CSVRow[]>([]);
+  const [compareResults,  setCompareResults]  = useState<CompareResult[]>([]);
+  const [resultFilter,    setResultFilter]    = useState<"all" | ResultType>("all");
+  const [parseError,      setParseError]      = useState<string | null>(null);
+  const [isDragging,      setIsDragging]      = useState(false);
+  const [csvLabel,        setCsvLabel]        = useState("May 2026");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Load real orders from Firestore via session-cookie-authenticated API
+  useEffect(() => {
+    fetch("/api/orders")
+      .then(r => r.json())
+      .then(data => {
+        if (data.orders) {
+          setSystemOrders(
+            data.orders.map((o: any) => ({
+              id:      o.id,
+              product: o.product ?? o.productName ?? "—",
+              estComm: o.estComm ?? o.commission ?? 0,
+              date:    o.date ?? (o.createdAt ? o.createdAt.slice(0, 10) : "—"),
+            }))
+          );
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingOrders(false));
+  }, []);
 
   const processFile = useCallback((file: File) => {
     setParseError(null);
@@ -123,7 +125,7 @@ export default function CSVCheckPage() {
       try {
         const rows = parseCSVText(e.target?.result as string);
         setCsvRows(rows);
-        setCompareResults(runComparison(rows));
+        setCompareResults(runComparison(rows, systemOrders));
         setCsvUploaded(true);
       } catch (err: any) {
         setParseError(err.message ?? "Failed to parse CSV.");
@@ -131,7 +133,7 @@ export default function CSVCheckPage() {
     };
     reader.onerror = () => setParseError("Could not read the file.");
     reader.readAsText(file);
-  }, []);
+  }, [systemOrders]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -146,13 +148,6 @@ export default function CSVCheckPage() {
     if (f) processFile(f);
   }
 
-  function loadDemo() {
-    setCsvRows(DEMO_CSV);
-    setParseError(null);
-    setCompareResults(runComparison(DEMO_CSV));
-    setCsvUploaded(true);
-  }
-
   function reset() {
     setCsvUploaded(false);
     setCsvRows([]);
@@ -161,10 +156,10 @@ export default function CSVCheckPage() {
     setParseError(null);
   }
 
-  const filtered      = compareResults.filter(r => resultFilter === "all" || r.result === resultFilter);
-  const matchedCount  = compareResults.filter(r => r.result === "matched").length;
-  const notInSys      = compareResults.filter(r => r.result === "not_in_system").length;
-  const notInCSV      = compareResults.filter(r => r.result === "not_in_csv").length;
+  const filtered     = compareResults.filter(r => resultFilter === "all" || r.result === resultFilter);
+  const matchedCount = compareResults.filter(r => r.result === "matched").length;
+  const notInSys     = compareResults.filter(r => r.result === "not_in_system").length;
+  const notInCSV     = compareResults.filter(r => r.result === "not_in_csv").length;
 
   return (
     <div className="space-y-5">
@@ -177,7 +172,7 @@ export default function CSVCheckPage() {
             <div className="text-sm font-semibold text-gray-900 mb-1">TikTok CSV vs System Check</div>
             <p className="text-xs text-gray-600 leading-relaxed">
               Export your orders CSV from TikTok Shop (Creator Center → Orders → Export CSV) and upload it here.
-              The system compares every order ID against your records instantly.
+              The system compares every order ID against your imported orders instantly.
             </p>
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
               {[
@@ -216,6 +211,28 @@ export default function CSVCheckPage() {
           <p className="text-xs text-gray-500 mb-1">Export from TikTok Shop → Creator Center → Orders → Export CSV</p>
           <p className="text-[10px] text-gray-400 mb-5">All TikTok Shop CSV formats supported · multiple regions</p>
 
+          {/* System orders status pill */}
+          <div className="flex items-center justify-center mb-5">
+            {loadingOrders ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 border border-gray-200 px-3 py-1 text-xs text-gray-500">
+                <Loader2 className="h-3 w-3 animate-spin" /> Loading your system orders…
+              </span>
+            ) : systemOrders.length === 0 ? (
+              <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs text-amber-700">
+                <PackageSearch className="h-3.5 w-3.5" />
+                No orders in system yet —{" "}
+                <Link href="/orders" className="font-semibold underline hover:text-amber-900">
+                  import orders first
+                </Link>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs text-emerald-700">
+                <CheckCheck className="h-3 w-3" />
+                {systemOrders.length} orders loaded from system
+              </span>
+            )}
+          </div>
+
           {parseError && (
             <div className="mb-5 flex items-center gap-2 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 max-w-md mx-auto text-left">
               <X className="h-4 w-4 shrink-0" />{parseError}
@@ -231,18 +248,14 @@ export default function CSVCheckPage() {
             />
           </div>
 
-          <div className="flex items-center justify-center gap-3 flex-wrap">
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-500 px-6 py-3 text-sm font-semibold text-white hover:opacity-90 active:scale-95 transition-all shadow-sm shadow-violet-200"
-            >
-              <Upload className="h-4 w-4" /> Choose CSV File
-            </button>
-            <span className="text-xs text-gray-400 hidden sm:block">or drag &amp; drop here</span>
-          </div>
-          <button onClick={loadDemo} className="mt-4 text-[10px] text-gray-400 underline hover:text-gray-600 transition-colors">
-            Load sample data for demo
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={loadingOrders}
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-500 px-6 py-3 text-sm font-semibold text-white hover:opacity-90 active:scale-95 transition-all shadow-sm shadow-violet-200 mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Upload className="h-4 w-4" /> Choose CSV File
           </button>
+          <p className="mt-2 text-[10px] text-gray-400">or drag &amp; drop here</p>
         </div>
       ) : (
         /* ── Results ── */
@@ -256,7 +269,7 @@ export default function CSVCheckPage() {
               </div>
               <div>
                 <div className="text-sm font-semibold text-gray-900">CSV Check — {csvLabel}</div>
-                <div className="text-xs text-gray-400">{csvRows.length} orders in CSV · {SYSTEM_ORDERS.length} orders in system</div>
+                <div className="text-xs text-gray-400">{csvRows.length} orders in CSV · {systemOrders.length} orders in system</div>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -298,11 +311,14 @@ export default function CSVCheckPage() {
               <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-semibold text-red-700">{notInSys} orders in TikTok CSV are missing from your system.</span>
-                <p className="text-xs text-red-600 mt-0.5">Import them to keep your reconciliation accurate.</p>
+                <p className="text-xs text-red-600 mt-0.5">Go to Orders to import them and keep your reconciliation accurate.</p>
               </div>
-              <button className="shrink-0 rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 active:scale-95 transition-all">
-                Import All
-              </button>
+              <Link
+                href="/orders"
+                className="shrink-0 rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 active:scale-95 transition-all"
+              >
+                Go to Orders
+              </Link>
             </div>
           )}
 
@@ -316,7 +332,6 @@ export default function CSVCheckPage() {
               <span className="ml-auto text-xs text-gray-400">{filtered.length} rows</span>
             </div>
 
-            {/* Table with horizontal scroll on mobile */}
             <div className="overflow-x-auto">
               <div className="min-w-[520px]">
                 <div className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1fr] gap-3 px-4 sm:px-5 py-3 border-b border-gray-100 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">

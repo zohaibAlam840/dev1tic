@@ -9,7 +9,7 @@ export type UserProfile = {
   uid:       string;
   email:     string;
   name:      string;
-  role:      "admin" | "creator";
+  role:      "admin" | "manager" | "creator";
   accountId: string;
   is_active: boolean;
 };

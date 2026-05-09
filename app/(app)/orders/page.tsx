@@ -171,7 +171,7 @@ export default function OrdersPage() {
     if (!userId) return;
     async function fetchOrders() {
       try {
-        const res = await fetch(`/api/orders?userId=${userId}`);
+        const res = await fetch("/api/orders");
         const json = await res.json();
         if (res.ok) setSystemOrders(json.orders);
       } catch (err) {
@@ -252,7 +252,7 @@ export default function OrdersPage() {
       await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, orders: pendingOrders }),
+        body: JSON.stringify({ orders: pendingOrders }),
       });
 
       setSystemOrders(prev => {
@@ -359,7 +359,7 @@ export default function OrdersPage() {
             await fetch("/api/orders", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userId, orders: [order] }),
+              body: JSON.stringify({ orders: [order] }),
             });
             setSystemOrders(prev => {
               if (prev.find(o => o.id === order.id)) return prev;

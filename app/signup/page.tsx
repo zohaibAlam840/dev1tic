@@ -1,10 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc, collection } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { createUserWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { TrendingUp, Mail, Lock, Eye, EyeOff, User, ArrowRight, CheckCircle } from "lucide-react";
 
 const PERKS = [
@@ -22,6 +21,13 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export default function SignupPage() {
   const router = useRouter();
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) router.replace("/dashboard");
+    });
+    return unsub;
+  }, []);
 
   const [name,     setName]     = useState("");
   const [email,    setEmail]    = useState("");
@@ -44,31 +50,22 @@ export default function SignupPage() {
     try {
       // 1. Create Firebase Auth user
       const credential = await createUserWithEmailAndPassword(auth, email, password);
-      const { uid }    = credential.user;
 
-      // 2. Create the Account document (this admin's workspace)
-      const accountRef = doc(collection(db, "accounts"));
-      await setDoc(accountRef, {
-        ownerUid:  uid,
-        name:      name + "'s Workspace",
-        plan:      "free",
-        createdAt: new Date().toISOString(),
+      // 2. Create account + user docs server-side via Admin SDK
+      const idToken       = await credential.user.getIdToken();
+      const registerRes   = await fetch("/api/auth/register", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          idToken,
+          name:     name.trim(),
+          email,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
       });
+      if (!registerRes.ok) throw new Error("register_failed");
 
-      // 3. Create the User document with role:"admin" linked to that account
-      await setDoc(doc(db, "users", uid), {
-        accountId: accountRef.id,
-        name,
-        email,
-        role:      "admin",
-        is_active: true,
-        timezone:  Intl.DateTimeFormat().resolvedOptions().timeZone,
-        createdAt: new Date().toISOString(),
-        createdBy: uid,
-      });
-
-      // 4. Create server-side session cookie
-      const idToken    = await credential.user.getIdToken();
+      // 3. Create server-side session cookie
       const sessionRes = await fetch("/api/auth/session", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },

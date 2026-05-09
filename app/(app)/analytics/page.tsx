@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import clsx from "clsx";
 import {
   Upload, TrendingUp, DollarSign, ShoppingBag, Eye, MousePointer,
@@ -9,12 +9,12 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
+import { useAuth } from "@/lib/auth-context";
 
 type DailyRow   = { date: string; gmv: number; items: number; commission: number; impressions: number; clicks: number };
 type ProductRow = { name: string; gmv: number; items: number; commission: number };
 type ManualTab  = "daily" | "products";
 
-// ── Manual analytics entry modal ──────────────────────────────────────────────
 function ManualAnalyticsModal({
   onClose,
   onAddDaily,
@@ -24,33 +24,28 @@ function ManualAnalyticsModal({
   onAddDaily:   (row: DailyRow) => void;
   onAddProduct: (row: ProductRow) => void;
 }) {
-  const [tab,          setTab]          = useState<ManualTab>("daily");
-
-  // Daily fields
-  const [date,         setDate]         = useState(new Date().toISOString().split("T")[0]);
-  const [gmv,          setGmv]          = useState("");
-  const [items,        setItems]        = useState("");
-  const [commission,   setCommission]   = useState("");
-  const [impressions,  setImpressions]  = useState("");
-  const [clicks,       setClicks]       = useState("");
-
-  // Product fields
-  const [pName,        setPName]        = useState("");
-  const [pGmv,         setPGmv]         = useState("");
-  const [pItems,       setPItems]       = useState("");
-  const [pComm,        setPComm]        = useState("");
-
-  const [error,        setError]        = useState<string | null>(null);
+  const [tab,        setTab]        = useState<ManualTab>("daily");
+  const [date,       setDate]       = useState(new Date().toISOString().split("T")[0]);
+  const [gmv,        setGmv]        = useState("");
+  const [items,      setItems]      = useState("");
+  const [commission, setCommission] = useState("");
+  const [impressions,setImpressions]= useState("");
+  const [clicks,     setClicks]     = useState("");
+  const [pName,      setPName]      = useState("");
+  const [pGmv,       setPGmv]       = useState("");
+  const [pItems,     setPItems]     = useState("");
+  const [pComm,      setPComm]      = useState("");
+  const [error,      setError]      = useState<string | null>(null);
 
   function submitDaily(e: React.FormEvent) {
     e.preventDefault();
     onAddDaily({
       date,
-      gmv:         parseFloat(gmv)         || 0,
-      items:       parseInt(items)          || 0,
-      commission:  parseFloat(commission)  || 0,
-      impressions: parseInt(impressions)   || 0,
-      clicks:      parseInt(clicks)        || 0,
+      gmv:         parseFloat(gmv)        || 0,
+      items:       parseInt(items)         || 0,
+      commission:  parseFloat(commission) || 0,
+      impressions: parseInt(impressions)  || 0,
+      clicks:      parseInt(clicks)       || 0,
     });
     onClose();
   }
@@ -58,14 +53,11 @@ function ManualAnalyticsModal({
   function submitProduct(e: React.FormEvent) {
     e.preventDefault();
     if (!pName.trim()) { setError("Product name is required."); return; }
-    onAddProduct({
-      name:       pName.trim(),
-      gmv:        parseFloat(pGmv)   || 0,
-      items:      parseInt(pItems)   || 0,
-      commission: parseFloat(pComm)  || 0,
-    });
+    onAddProduct({ name: pName.trim(), gmv: parseFloat(pGmv) || 0, items: parseInt(pItems) || 0, commission: parseFloat(pComm) || 0 });
     onClose();
   }
+
+  const inputCls = "w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all";
 
   return (
     <>
@@ -79,15 +71,13 @@ function ManualAnalyticsModal({
             </div>
             <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="h-4 w-4 text-gray-500" /></button>
           </div>
-
-          {/* Tabs */}
           <div className="flex gap-1 p-3 border-b border-gray-100 bg-gray-50">
-            {([{ id: "daily", label: "Daily Stats" }, { id: "products", label: "Top Product" }] as { id: ManualTab; label: string }[]).map(t => (
-              <button key={t.id} onClick={() => { setTab(t.id); setError(null); }}
+            {(["daily", "products"] as ManualTab[]).map(t => (
+              <button key={t} onClick={() => { setTab(t); setError(null); }}
                 className={clsx("flex-1 rounded-lg py-2 text-xs font-semibold transition-all",
-                  tab === t.id ? "bg-white text-violet-700 shadow border border-violet-100" : "text-gray-500 hover:text-gray-700"
+                  tab === t ? "bg-white text-violet-700 shadow border border-violet-100" : "text-gray-500 hover:text-gray-700"
                 )}>
-                {t.label}
+                {t === "daily" ? "Daily Stats" : "Top Product"}
               </button>
             ))}
           </div>
@@ -96,35 +86,21 @@ function ManualAnalyticsModal({
             <form onSubmit={submitDaily} className="px-6 py-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Date</label>
-                <input type="date" required value={date} onChange={e => setDate(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
+                <input type="date" required value={date} onChange={e => setDate(e.target.value)} className={inputCls} />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">GMV ($)</label>
-                  <input type="number" step="0.01" min="0" value={gmv} onChange={e => setGmv(e.target.value)} placeholder="1234.56"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Items Sold</label>
-                  <input type="number" min="0" value={items} onChange={e => setItems(e.target.value)} placeholder="42"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Commission ($)</label>
-                  <input type="number" step="0.01" min="0" value={commission} onChange={e => setCommission(e.target.value)} placeholder="98.76"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Impressions</label>
-                  <input type="number" min="0" value={impressions} onChange={e => setImpressions(e.target.value)} placeholder="12400"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Clicks</label>
-                  <input type="number" min="0" value={clicks} onChange={e => setClicks(e.target.value)} placeholder="820"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
-                </div>
+                {[
+                  { label: "GMV ($)",        val: gmv,        set: setGmv,        step: "0.01", ph: "1234.56" },
+                  { label: "Items Sold",     val: items,      set: setItems,      step: "1",    ph: "42" },
+                  { label: "Commission ($)", val: commission, set: setCommission, step: "0.01", ph: "98.76" },
+                  { label: "Impressions",    val: impressions,set: setImpressions,step: "1",    ph: "12400" },
+                  { label: "Clicks",         val: clicks,     set: setClicks,     step: "1",    ph: "820" },
+                ].map(({ label, val, set, step, ph }) => (
+                  <div key={label}>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">{label}</label>
+                    <input type="number" step={step} min="0" value={val} onChange={e => set(e.target.value)} placeholder={ph} className={inputCls} />
+                  </div>
+                ))}
               </div>
               <button type="submit" className="w-full rounded-2xl bg-violet-600 py-3 text-sm font-bold text-white hover:bg-violet-700 transition-all">
                 Add Day
@@ -134,25 +110,19 @@ function ManualAnalyticsModal({
             <form onSubmit={submitProduct} className="px-6 py-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Product Name</label>
-                <input required value={pName} onChange={e => setPName(e.target.value)} placeholder="Hydra Serum 50ml"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
+                <input required value={pName} onChange={e => setPName(e.target.value)} placeholder="Hydra Serum 50ml" className={inputCls} />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Attr. GMV ($)</label>
-                  <input type="number" step="0.01" min="0" value={pGmv} onChange={e => setPGmv(e.target.value)} placeholder="4200"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Items Sold</label>
-                  <input type="number" min="0" value={pItems} onChange={e => setPItems(e.target.value)} placeholder="84"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Est. Commission ($)</label>
-                  <input type="number" step="0.01" min="0" value={pComm} onChange={e => setPComm(e.target.value)} placeholder="336"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
-                </div>
+                {[
+                  { label: "Attr. GMV ($)",        val: pGmv,   set: setPGmv,   ph: "4200" },
+                  { label: "Items Sold",            val: pItems, set: setPItems, ph: "84" },
+                  { label: "Est. Commission ($)",   val: pComm,  set: setPComm,  ph: "336" },
+                ].map(({ label, val, set, ph }) => (
+                  <div key={label}>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">{label}</label>
+                    <input type="number" step="0.01" min="0" value={val} onChange={e => set(e.target.value)} placeholder={ph} className={inputCls} />
+                  </div>
+                ))}
               </div>
               {error && <p className="text-xs text-red-600">{error}</p>}
               <button type="submit" className="w-full rounded-2xl bg-violet-600 py-3 text-sm font-bold text-white hover:bg-violet-700 transition-all">
@@ -167,11 +137,13 @@ function ManualAnalyticsModal({
 }
 
 export default function AnalyticsPage() {
+  const { profile } = useAuth();
   const [range,    setRange]   = useState("7D");
   const [metric,   setMetric]  = useState<"gmv" | "items" | "commission">("gmv");
 
   const [dailyData,    setDailyData]    = useState<DailyRow[]>([]);
   const [topProducts,  setTopProducts]  = useState<ProductRow[]>([]);
+  const [loadingData,  setLoadingData]  = useState(true);
 
   const [uploadingDaily,    setUploadingDaily]    = useState(false);
   const [uploadingProducts, setUploadingProducts] = useState(false);
@@ -182,14 +154,58 @@ export default function AnalyticsPage() {
   const dailyRef    = useRef<HTMLInputElement>(null);
   const productsRef = useRef<HTMLInputElement>(null);
 
-  // KPIs computed from real uploaded data
+  // Load saved analytics from Firestore on mount
+  useEffect(() => {
+    if (!profile) return;
+    async function load() {
+      try {
+        const res  = await fetch("/api/analytics");
+        const json = await res.json();
+        if (res.ok) {
+          if (json.daily?.length)    setDailyData(json.daily);
+          if (json.products?.length) setTopProducts(json.products);
+        }
+      } catch (err) {
+        console.error("[analytics load]", err);
+      } finally {
+        setLoadingData(false);
+      }
+    }
+    load();
+  }, [profile]);
+
+  // ── Firestore save helpers ───────────────────────────────────────────────
+  async function saveDaily(row: DailyRow) {
+    try {
+      await fetch("/api/analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "daily", data: row }),
+      });
+    } catch (err) {
+      console.error("[analytics save daily]", err);
+    }
+  }
+
+  async function saveProducts(rows: ProductRow[]) {
+    try {
+      await fetch("/api/analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "products", data: rows }),
+      });
+    } catch (err) {
+      console.error("[analytics save products]", err);
+    }
+  }
+
+  // KPIs
   const totalGmv         = dailyData.reduce((s, d) => s + d.gmv, 0);
   const totalComm        = dailyData.reduce((s, d) => s + d.commission, 0);
   const totalItems       = dailyData.reduce((s, d) => s + d.items, 0);
   const totalImpressions = dailyData.reduce((s, d) => s + d.impressions, 0);
   const totalClicks      = dailyData.reduce((s, d) => s + d.clicks, 0);
-
-  const hasData = dailyData.length > 0 || topProducts.length > 0;
+  const hasData          = dailyData.length > 0 || topProducts.length > 0;
 
   async function handleUpload(file: File, type: "analytics_daily" | "analytics_products") {
     const isDaily = type === "analytics_daily";
@@ -209,15 +225,16 @@ export default function AnalyticsPage() {
         const d = json.data as DailyRow;
         setDailyData(prev => {
           const idx = prev.findIndex(r => r.date === d.date);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = d;
-            return next;
-          }
-          return [...prev, d].sort((a, b) => a.date.localeCompare(b.date));
+          const next = idx >= 0
+            ? prev.map((r, i) => i === idx ? d : r)
+            : [...prev, d].sort((a, b) => a.date.localeCompare(b.date));
+          return next;
         });
+        await saveDaily(d);
       } else {
-        setTopProducts(json.data as ProductRow[]);
+        const rows = json.data as ProductRow[];
+        setTopProducts(rows);
+        await saveProducts(rows);
       }
     } catch (err: any) {
       if (isDaily) setDailyError(err.message);
@@ -241,24 +258,37 @@ export default function AnalyticsPage() {
     : n >= 1_000   ? `${(n / 1_000).toFixed(1)}K`
     : n.toString();
 
+  if (loadingData) {
+    return (
+      <div className="p-5 lg:p-7 flex items-center justify-center min-h-[400px]">
+        <div className="h-8 w-8 rounded-full border-2 border-violet-400 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="p-5 lg:p-7 space-y-6">
 
-      {/* Hidden file inputs */}
       <input ref={dailyRef}    type="file" accept="image/*" className="hidden" onChange={onFileChange("analytics_daily")} />
       <input ref={productsRef} type="file" accept="image/*" className="hidden" onChange={onFileChange("analytics_products")} />
 
       {manualOpen && (
         <ManualAnalyticsModal
           onClose={() => setManualOpen(false)}
-          onAddDaily={row => {
+          onAddDaily={async row => {
             setDailyData(prev => {
               const idx = prev.findIndex(r => r.date === row.date);
-              if (idx >= 0) { const next = [...prev]; next[idx] = row; return next; }
-              return [...prev, row].sort((a, b) => a.date.localeCompare(b.date));
+              return idx >= 0
+                ? prev.map((r, i) => i === idx ? row : r)
+                : [...prev, row].sort((a, b) => a.date.localeCompare(b.date));
             });
+            await saveDaily(row);
           }}
-          onAddProduct={row => setTopProducts(prev => [...prev, row])}
+          onAddProduct={async row => {
+            const updated = [...topProducts, row];
+            setTopProducts(updated);
+            await saveProducts(updated);
+          }}
         />
       )}
 
@@ -276,27 +306,19 @@ export default function AnalyticsPage() {
           {productsError && <p className="mt-1 text-xs text-red-600 flex items-center gap-1"><X className="h-3 w-3" />{productsError}</p>}
         </div>
         <div className="flex gap-2 shrink-0 flex-wrap">
-          <button
-            onClick={() => dailyRef.current?.click()}
-            disabled={uploadingDaily}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-sm disabled:opacity-60"
-          >
+          <button onClick={() => dailyRef.current?.click()} disabled={uploadingDaily}
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
             {uploadingDaily
               ? <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
               : <Upload className="h-4 w-4" />}
             Upload Screenshot
           </button>
-          <button
-            onClick={() => setManualOpen(true)}
-            className="flex items-center gap-2 rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-medium text-pink-700 hover:bg-pink-50 transition-all shadow-sm"
-          >
+          <button onClick={() => setManualOpen(true)}
+            className="flex items-center gap-2 rounded-xl border border-pink-200 bg-white px-4 py-2.5 text-sm font-medium text-pink-700 hover:bg-pink-50 transition-all shadow-sm">
             <Plus className="h-4 w-4" /> Add Manually
           </button>
-          <button
-            onClick={() => productsRef.current?.click()}
-            disabled={uploadingProducts}
-            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all shadow-sm disabled:opacity-60"
-          >
+          <button onClick={() => productsRef.current?.click()} disabled={uploadingProducts}
+            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all shadow-sm disabled:opacity-60">
             {uploadingProducts
               ? <span className="h-4 w-4 rounded-full border-2 border-gray-300 border-t-gray-600 animate-spin" />
               : <BarChart2 className="h-4 w-4" />}
@@ -313,30 +335,24 @@ export default function AnalyticsPage() {
           </div>
           <h3 className="text-lg font-bold text-gray-900 mb-2">No analytics data yet</h3>
           <p className="text-sm text-gray-400 max-w-sm leading-relaxed mb-6">
-            Upload a screenshot of your TikTok analytics dashboard. Gemini AI will automatically extract all the numbers for you.
+            Upload a screenshot of your TikTok analytics dashboard or add stats manually — data is saved and persists across sessions.
           </p>
           <div className="flex items-center gap-3 flex-wrap justify-center">
-            <button
-              onClick={() => dailyRef.current?.click()}
-              disabled={uploadingDaily}
-              className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-pink-500 to-violet-600 px-6 py-3 text-sm font-semibold text-white hover:opacity-90 transition-all disabled:opacity-60"
-            >
+            <button onClick={() => dailyRef.current?.click()} disabled={uploadingDaily}
+              className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-pink-500 to-violet-600 px-6 py-3 text-sm font-semibold text-white hover:opacity-90 transition-all disabled:opacity-60">
               {uploadingDaily
                 ? <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
                 : <Upload className="h-4 w-4" />}
               Upload screenshot
             </button>
-            <button
-              onClick={() => setManualOpen(true)}
-              className="flex items-center gap-2 rounded-2xl border border-pink-200 bg-white px-6 py-3 text-sm font-medium text-pink-700 hover:bg-pink-50 transition-all"
-            >
+            <button onClick={() => setManualOpen(true)}
+              className="flex items-center gap-2 rounded-2xl border border-pink-200 bg-white px-6 py-3 text-sm font-medium text-pink-700 hover:bg-pink-50 transition-all">
               <Plus className="h-4 w-4" /> Add manually
             </button>
           </div>
         </div>
       )}
 
-      {/* Live data views */}
       {hasData && (
         <>
           {/* Range + export */}
@@ -359,11 +375,11 @@ export default function AnalyticsPage() {
           {dailyData.length > 0 && (
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               {[
-                { label: "Attr. GMV",       value: `$${totalGmv.toLocaleString()}`,  icon: TrendingUp,  bg: "bg-violet-50 border-violet-100",    ic: "bg-violet-100 text-violet-600",    tx: "text-violet-700" },
-                { label: "Est. Commission", value: `$${totalComm.toFixed(2)}`,        icon: DollarSign,  bg: "bg-pink-50 border-pink-100",        ic: "bg-pink-100 text-pink-600",        tx: "text-pink-700" },
-                { label: "Items Sold",      value: totalItems.toLocaleString(),       icon: ShoppingBag, bg: "bg-blue-50 border-blue-100",        ic: "bg-blue-100 text-blue-600",        tx: "text-blue-700" },
-                { label: "Impressions",     value: fmt(totalImpressions),             icon: Eye,         bg: "bg-emerald-50 border-emerald-100",  ic: "bg-emerald-100 text-emerald-600",  tx: "text-emerald-700" },
-                { label: "Clicks",          value: fmt(totalClicks),                  icon: MousePointer,bg: "bg-amber-50 border-amber-100",      ic: "bg-amber-100 text-amber-600",      tx: "text-amber-700" },
+                { label: "Attr. GMV",       value: `$${totalGmv.toLocaleString()}`,    icon: TrendingUp,   bg: "bg-violet-50 border-violet-100",   ic: "bg-violet-100 text-violet-600",   tx: "text-violet-700" },
+                { label: "Est. Commission", value: `$${totalComm.toFixed(2)}`,          icon: DollarSign,   bg: "bg-pink-50 border-pink-100",       ic: "bg-pink-100 text-pink-600",       tx: "text-pink-700" },
+                { label: "Items Sold",      value: totalItems.toLocaleString(),          icon: ShoppingBag,  bg: "bg-blue-50 border-blue-100",       ic: "bg-blue-100 text-blue-600",       tx: "text-blue-700" },
+                { label: "Impressions",     value: fmt(totalImpressions),               icon: Eye,          bg: "bg-emerald-50 border-emerald-100", ic: "bg-emerald-100 text-emerald-600", tx: "text-emerald-700" },
+                { label: "Clicks",          value: fmt(totalClicks),                    icon: MousePointer, bg: "bg-amber-50 border-amber-100",     ic: "bg-amber-100 text-amber-600",     tx: "text-amber-700" },
               ].map(({ label, value, icon: Icon, bg, ic, tx }) => (
                 <div key={label} className={`rounded-2xl border p-4 ${bg}`}>
                   <div className={`h-8 w-8 rounded-xl flex items-center justify-center mb-3 ${ic}`}>
@@ -436,10 +452,7 @@ export default function AnalyticsPage() {
             <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                 <div className="text-sm font-semibold text-gray-900">Top Products</div>
-                <button
-                  onClick={() => productsRef.current?.click()}
-                  className="text-xs text-violet-600 hover:underline"
-                >
+                <button onClick={() => productsRef.current?.click()} className="text-xs text-violet-600 hover:underline">
                   Update
                 </button>
               </div>
@@ -472,11 +485,8 @@ export default function AnalyticsPage() {
                 <div className="text-sm font-medium text-gray-700">No product breakdown yet</div>
                 <p className="text-xs text-gray-400 mt-0.5">Upload a top-products screenshot to see per-product GMV and commission.</p>
               </div>
-              <button
-                onClick={() => productsRef.current?.click()}
-                disabled={uploadingProducts}
-                className="shrink-0 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-60"
-              >
+              <button onClick={() => productsRef.current?.click()} disabled={uploadingProducts}
+                className="shrink-0 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-60">
                 {uploadingProducts
                   ? <span className="h-4 w-4 rounded-full border-2 border-gray-300 border-t-gray-600 animate-spin" />
                   : <Upload className="h-4 w-4" />}

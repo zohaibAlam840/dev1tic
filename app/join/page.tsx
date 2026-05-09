@@ -1,10 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { TrendingUp, Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -17,6 +16,13 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export default function JoinPage() {
   const router = useRouter();
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) router.replace("/dashboard");
+    });
+    return unsub;
+  }, []);
 
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
@@ -40,11 +46,7 @@ export default function JoinPage() {
       });
       if (!sessionRes.ok) throw new Error("session_failed");
 
-      // Admins who land here get sent to the right place
-      const snap = await getDoc(doc(db, "users", credential.user.uid));
-      const role = snap.exists() ? snap.data().role : "creator";
-
-      router.push(role === "admin" ? "/admin" : "/dashboard");
+      router.push("/dashboard");
     } catch (err: any) {
       const code = err?.code as string | undefined;
       setError(ERROR_MESSAGES[code ?? ""] ?? "Something went wrong. Please try again.");
@@ -123,6 +125,12 @@ export default function JoinPage() {
                   </button>
                 </div>
               </div>
+
+              <p className="text-right -mt-2">
+                <Link href="/login" className="text-xs text-gray-400 font-medium hover:text-[#1A1A1A] transition-colors">
+                  Forgot password?
+                </Link>
+              </p>
 
               {error && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium text-red-600">

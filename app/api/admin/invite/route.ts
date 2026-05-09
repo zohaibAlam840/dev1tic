@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { createNotification } from "@/lib/notifications";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -64,6 +65,26 @@ export async function POST(req: NextRequest) {
     } catch (mailErr) {
       console.error("[/api/admin/invite] email failed:", mailErr);
     }
+
+    // Welcome notification for the new user
+    await createNotification({
+      toUid:     newUser.uid,
+      accountId,
+      type:      "welcome",
+      title:     `Welcome to ${adminName}'s workspace`,
+      body:      `You've been added as ${role === "creator" ? "a Creator" : role === "manager" ? "a Manager" : "an Admin"}. Get started by checking your dashboard.`,
+      link:      "/dashboard",
+    });
+
+    // "Member joined" notification for the admin who invited
+    await createNotification({
+      toUid:     decoded.uid,
+      accountId,
+      type:      "member_joined",
+      title:     `${name.trim()} joined your workspace`,
+      body:      `${email.trim()} was added as ${role}.`,
+      link:      "/admin",
+    });
 
     return NextResponse.json({ uid: newUser.uid, email: email.trim(), emailSent });
 

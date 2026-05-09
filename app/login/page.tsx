@@ -1,10 +1,9 @@
 "use client";
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { TrendingUp, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, CheckCircle } from "lucide-react";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -26,6 +25,13 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const redirectTo   = searchParams.get("from") ?? "/dashboard";
   const notice       = searchParams.get("notice");
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) router.replace("/dashboard");
+    });
+    return unsub;
+  }, []);
 
   const [mode, setMode] = useState<"login" | "reset">("login");
 
@@ -58,10 +64,7 @@ function LoginContent() {
       });
       if (!sessionRes.ok) throw new Error("session_failed");
 
-      const snap = await getDoc(doc(db, "users", credential.user.uid));
-      const role = snap.exists() ? snap.data().role : "creator";
-
-      router.push(role === "admin" ? "/admin" : "/dashboard");
+      router.push("/dashboard");
     } catch (err: any) {
       const code = err?.code as string | undefined;
       setError(ERROR_MESSAGES[code ?? ""] ?? "Something went wrong. Please try again.");
