@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
+import { createUserWithEmailAndPassword, onAuthStateChanged, deleteUser } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { TrendingUp, Mail, Lock, Eye, EyeOff, User, ArrowRight, CheckCircle } from "lucide-react";
 
@@ -63,7 +63,10 @@ export default function SignupPage() {
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       });
-      if (!registerRes.ok) throw new Error("register_failed");
+      if (!registerRes.ok) {
+        await deleteUser(credential.user).catch(() => {});
+        throw new Error("register_failed");
+      }
 
       // 3. Create server-side session cookie
       const sessionRes = await fetch("/api/auth/session", {

@@ -64,7 +64,7 @@ function LoginContent() {
       });
       if (!sessionRes.ok) throw new Error("session_failed");
 
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (err: any) {
       const code = err?.code as string | undefined;
       setError(ERROR_MESSAGES[code ?? ""] ?? "Something went wrong. Please try again.");

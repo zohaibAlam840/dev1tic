@@ -3,8 +3,6 @@ import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { createNotification } from "@/lib/notifications";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function POST(req: NextRequest) {
   let createdUid: string | null = null;
 
@@ -55,6 +53,8 @@ export async function POST(req: NextRequest) {
     let   emailSent = false;
 
     try {
+      if (!process.env.RESEND_API_KEY) throw new Error("RESEND_API_KEY not set");
+      const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
         from:    "Crextio <onboarding@resend.dev>",
         to:      email.trim(),

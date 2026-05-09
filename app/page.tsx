@@ -4,8 +4,9 @@ import { useState } from "react";
 import {
   TrendingUp, Zap, ShoppingBag, BarChart3, Star, Mail,
   ArrowRight, CheckCircle, Menu, X, Shield, Users,
-  DollarSign, Package, Bell, ChevronRight,
+  DollarSign, Package, Bell, ChevronRight, LayoutDashboard,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 const NAV_LINKS = [
   { label: "Features", href: "#features" },
@@ -85,6 +86,7 @@ const STATS = [
 
 export default function LandingPage() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, loading } = useAuth();
 
   return (
     <div className="min-h-screen bg-[#F7F7F2] font-sans">
@@ -113,14 +115,25 @@ export default function LandingPage() {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-2">
-            <Link href="/login"
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-[#1A1A1A] hover:bg-white border border-transparent hover:border-[#E9E9E2] transition-all">
-              Log in
-            </Link>
-            <Link href="/signup"
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1A1A1A] text-sm font-semibold text-white hover:bg-black transition-all shadow-sm">
-              Get started <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+            {!loading && (
+              user ? (
+                <Link href="/dashboard"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1A1A1A] text-sm font-semibold text-white hover:bg-black transition-all shadow-sm">
+                  <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link href="/login"
+                    className="px-4 py-2 rounded-xl text-sm font-semibold text-[#1A1A1A] hover:bg-white border border-transparent hover:border-[#E9E9E2] transition-all">
+                    Log in
+                  </Link>
+                  <Link href="/signup"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1A1A1A] text-sm font-semibold text-white hover:bg-black transition-all shadow-sm">
+                    Get started <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </>
+              )
+            )}
           </div>
 
           {/* Mobile menu toggle */}
@@ -139,14 +152,23 @@ export default function LandingPage() {
               </a>
             ))}
             <div className="pt-3 flex flex-col gap-2">
-              <Link href="/login" onClick={() => setMobileOpen(false)}
-                className="w-full text-center py-3 rounded-xl border border-[#E9E9E2] text-sm font-semibold text-[#1A1A1A] hover:bg-[#F7F7F2] transition-all">
-                Log in
-              </Link>
-              <Link href="/signup" onClick={() => setMobileOpen(false)}
-                className="w-full text-center py-3 rounded-xl bg-[#1A1A1A] text-sm font-semibold text-white hover:bg-black transition-all">
-                Get started free
-              </Link>
+              {user ? (
+                <Link href="/dashboard" onClick={() => setMobileOpen(false)}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#1A1A1A] text-sm font-semibold text-white hover:bg-black transition-all">
+                  <LayoutDashboard className="h-4 w-4" /> Go to Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link href="/login" onClick={() => setMobileOpen(false)}
+                    className="w-full text-center py-3 rounded-xl border border-[#E9E9E2] text-sm font-semibold text-[#1A1A1A] hover:bg-[#F7F7F2] transition-all">
+                    Log in
+                  </Link>
+                  <Link href="/signup" onClick={() => setMobileOpen(false)}
+                    className="w-full text-center py-3 rounded-xl bg-[#1A1A1A] text-sm font-semibold text-white hover:bg-black transition-all">
+                    Get started free
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}
