@@ -1,9 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import clsx from "clsx";
 import {
   Plus, Search, Package, Clock, CheckCircle2, XCircle,
-  AlertTriangle, Video, Zap, Star, MoreHorizontal, X,
+  AlertTriangle, Video, Zap, Star, MoreHorizontal, X, ImageIcon, Loader2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
@@ -163,6 +163,9 @@ export default function SamplesPage() {
   const [saving,      setSaving]      = useState(false);
   const [form,        setForm]        = useState(EMPTY_FORM);
   const [menuOpen,    setMenuOpen]    = useState<string | null>(null);
+  const [ocrLoading,  setOcrLoading]  = useState(false);
+  const [ocrError,    setOcrError]    = useState<string | null>(null);
+  const imgRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!profile) return;
@@ -248,6 +251,37 @@ export default function SamplesPage() {
     await fetch(`/api/samples?id=${id}`, { method: "DELETE" });
   }
 
+  async function handleOCRUpload(file: File) {
+    setOcrLoading(true);
+    setOcrError(null);
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      fd.append("type",  "samples");
+      const res  = await fetch("/api/ocr", { method: "POST", body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "OCR failed");
+
+      const d = json.data as { product?: string; collab?: string; receivedDate?: string; dueDate?: string; notes?: string };
+      setForm({
+        product:      d.product      ?? "",
+        type:         "Free sample",
+        fulfillment:  "Video",
+        status:       "Needs content",
+        receivedDate: d.receivedDate ?? "",
+        dueDate:      d.dueDate      ?? "",
+        collab:       d.collab       ?? "",
+        notes:        d.notes        ?? "",
+      });
+      setCreateOpen(true);
+    } catch (err: any) {
+      setOcrError(err.message ?? "Could not read screenshot. Try again.");
+    } finally {
+      setOcrLoading(false);
+      if (imgRef.current) imgRef.current.value = "";
+    }
+  }
+
   function openEdit(s: Sample) {
     setMenuOpen(null);
     setEditSample(s);
@@ -305,12 +339,41 @@ export default function SamplesPage() {
             <h2 className="text-lg font-semibold text-gray-900">Samples Tracker</h2>
             <p className="text-xs text-gray-400 mt-0.5">Track product samples and content deadlines</p>
           </div>
-          <button
-            onClick={() => { setForm(EMPTY_FORM); setCreateOpen(true); }}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-500 px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-sm shadow-violet-200 w-fit">
-            <Plus className="h-4 w-4" /> Add Sample
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* OCR import */}
+            <input
+              ref={imgRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleOCRUpload(f); }}
+            />
+            <button
+              onClick={() => imgRef.current?.click()}
+              disabled={ocrLoading}
+              className="flex items-center gap-2 rounded-xl border border-[#E9E9E2] bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed w-fit">
+              {ocrLoading
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Reading…</>
+                : <><ImageIcon className="h-4 w-4" /> Import Screenshot</>
+              }
+            </button>
+            <button
+              onClick={() => { setForm(EMPTY_FORM); setCreateOpen(true); }}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-500 px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-sm shadow-violet-200 w-fit">
+              <Plus className="h-4 w-4" /> Add Sample
+            </button>
+          </div>
         </div>
+
+        {/* OCR error */}
+        {ocrError && (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-xs font-medium text-red-600">{ocrError}</p>
+            <button onClick={() => setOcrError(null)} className="text-red-400 hover:text-red-600 shrink-0">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* Summary */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
