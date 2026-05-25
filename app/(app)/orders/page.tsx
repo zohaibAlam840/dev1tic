@@ -10,7 +10,12 @@ import {
 } from "lucide-react";
 
 type ReconStatus = "Paid" | "Missing" | "Returned/Canceled" | "Flag";
-type Tab = "reconciliation" | "orders" | "settled" | "ineligible" | "csv-check";
+type Tab = "reconciliation" | "orders" | "settled" | "ineligible" | "csv-check" | "earnings" | "withdrawals";
+type EarningsType = "Daily Revenue" | "Flat Fee" | "Rewards";
+const EARNINGS_TYPES: EarningsType[] = ["Daily Revenue", "Flat Fee", "Rewards"];
+
+type EarningsRecord = { id: string; date: string; amount: number; type: EarningsType; notes: string };
+type Withdrawal     = { id: string; date: string; amount: number; notes: string };
 
 type Order = {
   id: string;
@@ -46,6 +51,83 @@ const RESULT_ICONS:  Record<string, React.ElementType> = { matched: CheckCheck, 
 const RESULT_LABELS: Record<string, string>            = { matched: "Matched", not_in_system: "Not in System", not_in_csv: "Not in CSV" };
 const ALL_STATUSES: ReconStatus[] = ["Paid", "Missing", "Returned/Canceled", "Flag"];
 const DATE_FILTERS = ["Today", "Yesterday", "7D", "Custom"];
+
+// ── Earnings batch review ─────────────────────────────────────────────────────
+function EarningsBatchReview({
+  records: initial, onClose, onConfirm,
+}: {
+  records: Omit<EarningsRecord, "id">[];
+  onClose: () => void;
+  onConfirm: (r: Omit<EarningsRecord, "id">[]) => Promise<void>;
+}) {
+  const [items, setItems] = useState(initial);
+  const [saving, setSaving] = useState(false);
+
+  const update = (i: number, key: string, val: string | number) =>
+    setItems(prev => prev.map((r, idx) => idx === i ? { ...r, [key]: val } : r));
+  const remove = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i));
+
+  async function handleConfirm() {
+    if (!items.length) return;
+    setSaving(true);
+    try { await onConfirm(items); } finally { setSaving(false); }
+  }
+
+  const inputCls = "w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-emerald-400 focus:bg-white transition-all";
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+        <div className="w-full max-w-xl bg-white rounded-[24px] shadow-2xl border border-gray-200 overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Review Extracted Earnings</h2>
+              <p className="text-xs text-emerald-600 font-bold mt-0.5">✓ {items.length} entr{items.length !== 1 ? "ies" : "y"} detected — edit before importing</p>
+            </div>
+            <button onClick={onClose} className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 space-y-3">
+            {items.map((r, i) => (
+              <div key={i} className="rounded-2xl border border-gray-200 p-4 space-y-3 relative">
+                <button onClick={() => remove(i)} className="absolute right-4 top-4 h-6 w-6 rounded-full hover:bg-red-50 flex items-center justify-center text-gray-300 hover:text-red-400 transition-all">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Entry {i + 1}</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Date</label>
+                    <input type="date" value={r.date} onChange={e => update(i, "date", e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Amount ($)</label>
+                    <input type="number" step="0.01" value={r.amount} onChange={e => update(i, "amount", parseFloat(e.target.value) || 0)} className={inputCls} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Type</label>
+                    <select value={r.type} onChange={e => update(i, "type", e.target.value)} className={inputCls}>
+                      {EARNINGS_TYPES.map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {items.length === 0 && <p className="text-center text-sm text-gray-400 py-8">All entries removed.</p>}
+          </div>
+          <div className="flex gap-3 px-6 py-4 border-t border-gray-100 shrink-0">
+            <button onClick={onClose} className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-all">Cancel</button>
+            <button onClick={handleConfirm} disabled={saving || items.length === 0}
+              className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition-all">
+              {saving ? "Importing…" : `Import ${items.length} Entr${items.length !== 1 ? "ies" : "y"}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 // ── Manual order entry modal ──────────────────────────────────────────────────
 function ManualOrderModal({ onClose, onAdd }: { onClose: () => void; onAdd: (o: Order) => void }) {
@@ -155,6 +237,7 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState<ReconStatus | "All">("All");
   const [search,       setSearch]       = useState("");
   const [tab,          setTab]          = useState<Tab>("reconciliation");
+  const [statusMenu,   setStatusMenu]   = useState<string | null>(null);
 
   const { profile } = useAuth();
   const userId = profile?.uid;
@@ -165,6 +248,14 @@ export default function OrdersPage() {
   const [loadingOrders,   setLoadingOrders]   = useState(true);
   const [ordersError,     setOrdersError]     = useState<string | null>(null);
   const [manualOpen,      setManualOpen]      = useState(false);
+
+  // Close status menu on outside click
+  useEffect(() => {
+    if (!statusMenu) return;
+    const close = () => setStatusMenu(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [statusMenu]);
 
   // Initial Fetch from Firestore
   useEffect(() => {
@@ -183,8 +274,128 @@ export default function OrdersPage() {
     fetchOrders();
   }, [userId]);
 
+  // Earnings state
+  const [earnings,        setEarnings]        = useState<EarningsRecord[]>([]);
+  const [earningsLoading, setEarningsLoading] = useState(false);
+  const [earningsError,   setEarningsError]   = useState<string | null>(null);
+  const [earningsOcrBusy, setEarningsOcrBusy] = useState(false);
+  const [pendingEarnings, setPendingEarnings] = useState<Omit<EarningsRecord,"id">[] | null>(null);
+  const [earningsTypeFilter, setEarningsTypeFilter] = useState<EarningsType | "All">("All");
+  const [earningsForm,    setEarningsForm]    = useState({ date: new Date().toISOString().split("T")[0], amount: "", type: "Daily Revenue" as EarningsType, notes: "" });
+  const [earningsFormOpen,setEarningsFormOpen]= useState(false);
+  const earningsOcrRef = useRef<HTMLInputElement>(null);
+
+  // Withdrawals state
+  const [withdrawals,        setWithdrawals]        = useState<Withdrawal[]>([]);
+  const [withdrawalsLoading, setWithdrawalsLoading] = useState(false);
+  const [wdForm,             setWdForm]             = useState({ date: new Date().toISOString().split("T")[0], amount: "", notes: "" });
+  const [wdFormOpen,         setWdFormOpen]         = useState(false);
+  const [wdSaving,           setWdSaving]           = useState(false);
+
   const ordersRef  = useRef<HTMLInputElement>(null);
   const settledRef = useRef<HTMLInputElement>(null);
+
+  // Fetch earnings when tab opens
+  useEffect(() => {
+    if (tab !== "earnings" || !userId || earnings.length > 0) return;
+    setEarningsLoading(true);
+    fetch("/api/earnings").then(r => r.json()).then(d => {
+      if (d.earnings) setEarnings(d.earnings);
+    }).finally(() => setEarningsLoading(false));
+  }, [tab, userId]);
+
+  // Fetch withdrawals when tab opens
+  useEffect(() => {
+    if (tab !== "withdrawals" || !userId || withdrawals.length > 0) return;
+    setWithdrawalsLoading(true);
+    fetch("/api/withdrawals").then(r => r.json()).then(d => {
+      if (d.withdrawals) setWithdrawals(d.withdrawals);
+    }).finally(() => setWithdrawalsLoading(false));
+  }, [tab, userId]);
+
+  async function handleEarningsOCR(file: File) {
+    setEarningsOcrBusy(true);
+    setEarningsError(null);
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      fd.append("type", "earnings");
+      const res  = await fetch("/api/ocr", { method: "POST", body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "OCR failed");
+      const raw = json.data;
+      const arr = (Array.isArray(raw) ? raw : [raw]).map((r: any) => ({
+        date:   r.date   || new Date().toISOString().split("T")[0],
+        amount: Number(r.amount) || 0,
+        type:   (EARNINGS_TYPES.includes(r.type) ? r.type : "Daily Revenue") as EarningsType,
+        notes:  r.notes  || "",
+      }));
+      setPendingEarnings(arr);
+    } catch (err: any) {
+      setEarningsError(err.message ?? "Could not read screenshot.");
+    } finally {
+      setEarningsOcrBusy(false);
+      if (earningsOcrRef.current) earningsOcrRef.current.value = "";
+    }
+  }
+
+  async function confirmEarnings(records: Omit<EarningsRecord,"id">[]) {
+    const res  = await fetch("/api/earnings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ records }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error);
+    setEarnings([]);
+    setPendingEarnings(null);
+    setEarningsLoading(true);
+    fetch("/api/earnings").then(r => r.json()).then(d => {
+      if (d.earnings) setEarnings(d.earnings);
+    }).finally(() => setEarningsLoading(false));
+  }
+
+  async function saveManualEarning() {
+    if (!earningsForm.amount) return;
+    await confirmEarnings([{
+      date:   earningsForm.date,
+      amount: Number(earningsForm.amount),
+      type:   earningsForm.type,
+      notes:  earningsForm.notes,
+    }]);
+    setEarningsForm({ date: new Date().toISOString().split("T")[0], amount: "", type: "Daily Revenue", notes: "" });
+    setEarningsFormOpen(false);
+  }
+
+  async function deleteEarning(id: string) {
+    setEarnings(prev => prev.filter(e => e.id !== id));
+    await fetch(`/api/earnings?id=${id}`, { method: "DELETE" });
+  }
+
+  async function saveWithdrawal() {
+    if (!wdForm.amount) return;
+    setWdSaving(true);
+    try {
+      const res  = await fetch("/api/withdrawals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: wdForm.date, amount: Number(wdForm.amount), notes: wdForm.notes }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      const newWd: Withdrawal = { id: json.id, date: wdForm.date, amount: Number(wdForm.amount), notes: wdForm.notes };
+      setWithdrawals(prev => [newWd, ...prev]);
+      setWdForm({ date: new Date().toISOString().split("T")[0], amount: "", notes: "" });
+      setWdFormOpen(false);
+    } finally {
+      setWdSaving(false);
+    }
+  }
+
+  async function deleteWithdrawal(id: string) {
+    setWithdrawals(prev => prev.filter(w => w.id !== id));
+    await fetch(`/api/withdrawals?id=${id}`, { method: "DELETE" });
+  }
 
   // CSV state
   const [csvUploaded,     setCsvUploaded]     = useState(false);
@@ -197,8 +408,12 @@ export default function OrdersPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Derived
-  const filtered   = systemOrders.filter(o => {
-    if (statusFilter !== "All" && o.status !== statusFilter) return false;
+  const filtered = systemOrders.filter(o => {
+    if (tab === "settled"    && o.status !== "Paid")              return false;
+    if (tab === "ineligible" && o.status !== "Returned/Canceled") return false;
+    if (tab === "reconciliation" || tab === "orders") {
+      if (statusFilter !== "All" && o.status !== statusFilter) return false;
+    }
     if (search && !o.product.toLowerCase().includes(search.toLowerCase()) && !o.id.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
@@ -266,6 +481,16 @@ export default function OrdersPage() {
     } finally {
       setUploadingOrders(false);
     }
+  }
+
+  async function updateOrderStatus(orderId: string, status: ReconStatus) {
+    setSystemOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+    setStatusMenu(null);
+    await fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: orderId, status }),
+    });
   }
 
   function onOCRFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -348,8 +573,9 @@ export default function OrdersPage() {
     <div className="p-5 lg:p-7 space-y-5">
 
       {/* Hidden OCR file inputs */}
-      <input ref={ordersRef}  type="file" accept="image/*" className="hidden" onChange={onOCRFileChange} />
-      <input ref={settledRef} type="file" accept="image/*" className="hidden" onChange={onOCRFileChange} />
+      <input ref={ordersRef}      type="file" accept="image/*" className="hidden" onChange={onOCRFileChange} />
+      <input ref={settledRef}     type="file" accept="image/*" className="hidden" onChange={onOCRFileChange} />
+      <input ref={earningsOcrRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleEarningsOCR(f); e.target.value = ""; }} />
 
       {manualOpen && (
         <ManualOrderModal
@@ -409,46 +635,71 @@ export default function OrdersPage() {
       {/* Pending Review UI */}
       {pendingOrders && (
         <div className="rounded-3xl border-2 border-[#FFD567] bg-[#FFD567]/5 p-6 animate-in fade-in slide-in-from-top-4 duration-500">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
             <div>
               <div className="flex items-center gap-2 text-[#1A1A1A] mb-1">
                 <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                 <h2 className="text-lg font-bold">Review Extracted Orders</h2>
               </div>
-              <p className="text-xs text-gray-500 font-medium">Gemini found {pendingOrders.length} orders. Check them before adding to system.</p>
+              <p className="text-xs text-gray-500 font-medium">Gemini found {pendingOrders.length} orders. Edit anything, remove rows you don&apos;t need, then confirm.</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               <button onClick={() => setPendingOrders(null)} className="px-4 py-2 text-xs font-bold text-gray-400 hover:text-red-500 transition-all">
                 Discard
               </button>
               <button
                 onClick={confirmPendingOrders}
-                disabled={uploadingOrders}
+                disabled={uploadingOrders || pendingOrders.length === 0}
                 className="flex items-center gap-2 rounded-2xl bg-[#1A1A1A] px-6 py-2.5 text-sm font-bold text-white hover:bg-black transition-all shadow-lg shadow-black/10 disabled:opacity-50"
               >
                 {uploadingOrders ? <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : <Plus className="h-4 w-4" />}
-                Add to System
+                Add {pendingOrders.length} to System
               </button>
             </div>
           </div>
           <div className="overflow-x-auto rounded-2xl border border-[#FFD567]/20 bg-white shadow-sm">
-            <div className="min-w-[600px]">
-              <div className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1fr] gap-4 px-5 py-3 bg-[#FFD567]/10 text-[10px] font-bold text-[#1A1A1A] uppercase tracking-widest">
-                <div>ID</div><div>Product</div><div>GMV</div><div>Comm</div><div>Status</div>
+            <div className="min-w-[700px]">
+              <div className="grid grid-cols-[1.4fr_2.5fr_1fr_1fr_1.3fr_32px] gap-3 px-4 py-3 bg-[#FFD567]/10 text-[10px] font-bold text-[#1A1A1A] uppercase tracking-widest">
+                <div>Order ID</div><div>Product</div><div>GMV ($)</div><div>Comm ($)</div><div>Status</div><div />
               </div>
-              {pendingOrders.map(o => (
-                <div key={o.id} className="grid grid-cols-[1.2fr_2fr_1fr_1fr_1fr] gap-4 px-5 py-4 border-b border-gray-100 last:border-0 items-center">
-                  <div className="text-[10px] font-mono font-bold text-violet-600">{o.id}</div>
-                  <div className="text-xs font-bold text-[#1A1A1A] truncate">{o.product}</div>
-                  <div className="text-xs font-medium text-gray-600">${o.commBase.toFixed(2)}</div>
-                  <div className="text-xs font-bold text-emerald-600">+${o.estComm.toFixed(2)}</div>
-                  <div>
-                    <span className={clsx("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase", STATUS_STYLES[o.status])}>
-                      {o.status}
-                    </span>
-                  </div>
+              {pendingOrders.map((o, i) => (
+                <div key={i} className="grid grid-cols-[1.4fr_2.5fr_1fr_1fr_1.3fr_32px] gap-3 px-4 py-3 border-b border-gray-100 last:border-0 items-center">
+                  <input
+                    value={o.id}
+                    onChange={e => setPendingOrders(prev => prev!.map((r, idx) => idx === i ? { ...r, id: e.target.value } : r))}
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[11px] font-mono text-violet-600 outline-none focus:border-violet-400 focus:bg-white transition-all"
+                  />
+                  <input
+                    value={o.product}
+                    onChange={e => setPendingOrders(prev => prev!.map((r, idx) => idx === i ? { ...r, product: e.target.value } : r))}
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 outline-none focus:border-violet-400 focus:bg-white transition-all"
+                  />
+                  <input
+                    type="number" step="0.01" value={o.commBase}
+                    onChange={e => setPendingOrders(prev => prev!.map((r, idx) => idx === i ? { ...r, commBase: parseFloat(e.target.value) || 0 } : r))}
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-violet-400 focus:bg-white transition-all"
+                  />
+                  <input
+                    type="number" step="0.01" value={o.estComm}
+                    onChange={e => setPendingOrders(prev => prev!.map((r, idx) => idx === i ? { ...r, estComm: parseFloat(e.target.value) || 0 } : r))}
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-emerald-600 font-semibold outline-none focus:border-violet-400 focus:bg-white transition-all"
+                  />
+                  <select
+                    value={o.status}
+                    onChange={e => setPendingOrders(prev => prev!.map((r, idx) => idx === i ? { ...r, status: e.target.value as ReconStatus } : r))}
+                    className={clsx("w-full rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold outline-none transition-all cursor-pointer", STATUS_STYLES[o.status])}>
+                    {ALL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <button
+                    onClick={() => setPendingOrders(prev => prev!.filter((_, idx) => idx !== i))}
+                    className="h-7 w-7 rounded-lg hover:bg-red-50 flex items-center justify-center text-gray-300 hover:text-red-400 transition-all">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               ))}
+              {pendingOrders.length === 0 && (
+                <div className="py-8 text-center text-sm text-gray-400">All rows removed. Discard or upload again.</div>
+              )}
             </div>
           </div>
         </div>
@@ -479,21 +730,278 @@ export default function OrdersPage() {
       {/* Tabs */}
       <div className="flex gap-1 rounded-xl border border-gray-200 bg-white p-1 w-fit shadow-sm overflow-x-auto">
         {([
-          { id: "reconciliation", label: "Reconciliation" },
-          { id: "orders",         label: "Orders" },
-          { id: "settled",        label: "Settled" },
-          { id: "ineligible",     label: "Ineligible" },
-          { id: "csv-check",      label: "CSV Check" },
-        ] as { id: Tab; label: string }[]).map(t => (
+          { id: "reconciliation", label: "Reconciliation", count: null },
+          { id: "orders",         label: "Orders",          count: systemOrders.length },
+          { id: "settled",        label: "Settled",         count: counts.Paid },
+          { id: "ineligible",     label: "Ineligible",      count: counts["Returned/Canceled"] },
+          { id: "earnings",       label: "Earnings",        count: earnings.length || null },
+          { id: "withdrawals",    label: "Withdrawals",     count: withdrawals.length || null },
+          { id: "csv-check",      label: "CSV Check",       count: null },
+        ] as { id: Tab; label: string; count: number | null }[]).map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={clsx("shrink-0 rounded-lg px-4 py-2 text-xs font-medium transition-all flex items-center gap-1.5",
               tab === t.id ? "bg-violet-600 text-white shadow" : "text-gray-500 hover:text-gray-900"
             )}>
             {t.id === "csv-check" && <FileSpreadsheet className="h-3.5 w-3.5" />}
             {t.label}
+            {t.count !== null && t.count > 0 && (
+              <span className={clsx("h-4 min-w-4 rounded-full px-1 flex items-center justify-center text-[9px] font-bold",
+                tab === t.id ? "bg-white/25 text-white" : "bg-gray-100 text-gray-500")}>
+                {t.count}
+              </span>
+            )}
           </button>
         ))}
       </div>
+
+      {/* ── EARNINGS TAB ── */}
+      {tab === "earnings" && (
+        <div className="space-y-5">
+          {/* OCR pending review */}
+          {pendingEarnings && (
+            <EarningsBatchReview
+              records={pendingEarnings}
+              onClose={() => setPendingEarnings(null)}
+              onConfirm={confirmEarnings}
+            />
+          )}
+
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+            <div className="h-12 w-12 shrink-0 rounded-2xl bg-emerald-100 flex items-center justify-center">
+              <DollarSign className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-gray-900 mb-0.5">Earnings History</div>
+              <p className="text-xs text-gray-500">Track daily revenue, flat fees, and rewards. Import via screenshot or add manually.</p>
+              {earningsError && <p className="mt-1 text-xs text-red-600">{earningsError}</p>}
+            </div>
+            <div className="flex gap-2 shrink-0 flex-wrap">
+              <button onClick={() => earningsOcrRef.current?.click()} disabled={earningsOcrBusy}
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-500 px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
+                {earningsOcrBusy
+                  ? <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  : <ImageIcon className="h-4 w-4" />}
+                Import Screenshot
+              </button>
+              <button onClick={() => setEarningsFormOpen(true)}
+                className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 transition-all shadow-sm">
+                <Plus className="h-4 w-4" /> Add Manually
+              </button>
+            </div>
+          </div>
+
+          {/* Manual entry form */}
+          {earningsFormOpen && (
+            <>
+              <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" onClick={() => setEarningsFormOpen(false)} />
+              <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+                <div className="w-full max-w-md bg-white rounded-3xl border border-gray-200 shadow-2xl">
+                  <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+                    <div className="text-sm font-bold text-gray-900">Add Earnings Entry</div>
+                    <button onClick={() => setEarningsFormOpen(false)} className="p-2 rounded-full hover:bg-gray-100"><X className="h-4 w-4 text-gray-500" /></button>
+                  </div>
+                  <div className="px-6 py-5 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Date</label>
+                        <input type="date" value={earningsForm.date} onChange={e => setEarningsForm(p => ({ ...p, date: e.target.value }))}
+                          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Amount ($)</label>
+                        <input type="number" step="0.01" min="0" value={earningsForm.amount} onChange={e => setEarningsForm(p => ({ ...p, amount: e.target.value }))} placeholder="0.00"
+                          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Type</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {EARNINGS_TYPES.map(t => (
+                          <button key={t} type="button" onClick={() => setEarningsForm(p => ({ ...p, type: t }))}
+                            className={clsx("rounded-xl border px-3 py-2 text-xs font-semibold transition-all",
+                              earningsForm.type === t ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300"
+                            )}>{t}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Notes</label>
+                      <input value={earningsForm.notes} onChange={e => setEarningsForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional note…"
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
+                    </div>
+                    <button onClick={saveManualEarning} disabled={!earningsForm.amount}
+                      className="w-full rounded-2xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 transition-all disabled:opacity-50">
+                      Save Entry
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Summary + filter */}
+          {earnings.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex gap-2 flex-wrap">
+                {(["All", ...EARNINGS_TYPES] as (EarningsType | "All")[]).map(t => (
+                  <button key={t} onClick={() => setEarningsTypeFilter(t)}
+                    className={clsx("rounded-xl px-3 py-1.5 text-xs font-semibold transition-all border",
+                      earningsTypeFilter === t ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-600 border-gray-200 hover:border-emerald-300"
+                    )}>{t}</button>
+                ))}
+              </div>
+              <div className="text-sm font-semibold text-gray-900">
+                Total: <span className="text-emerald-600">${earnings.filter(e => earningsTypeFilter === "All" || e.type === earningsTypeFilter).reduce((s, e) => s + e.amount, 0).toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Table */}
+          {earningsLoading ? (
+            <div className="flex items-center justify-center py-16"><div className="h-8 w-8 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin" /></div>
+          ) : earnings.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center rounded-2xl border border-dashed border-gray-300 bg-white">
+              <DollarSign className="h-12 w-12 text-gray-200 mb-3" />
+              <p className="text-sm font-semibold text-gray-700 mb-1">No earnings recorded yet</p>
+              <p className="text-xs text-gray-400 mb-5">Import a screenshot or add an entry manually.</p>
+              <button onClick={() => setEarningsFormOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 transition-all">
+                <Plus className="h-4 w-4" /> Add Entry
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <div className="min-w-[500px]">
+                  <div className="grid grid-cols-[1fr_1fr_1fr_2fr_40px] gap-4 px-5 py-3 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    <div>Date</div><div>Type</div><div>Amount</div><div>Notes</div><div />
+                  </div>
+                  {earnings.filter(e => earningsTypeFilter === "All" || e.type === earningsTypeFilter).map(e => (
+                    <div key={e.id} className="grid grid-cols-[1fr_1fr_1fr_2fr_40px] gap-4 px-5 py-4 border-b border-gray-100 hover:bg-gray-50 transition-all items-center last:border-0">
+                      <div className="text-sm text-gray-700">{e.date}</div>
+                      <div>
+                        <span className={clsx("rounded-lg border px-2.5 py-1 text-xs font-semibold",
+                          e.type === "Daily Revenue" ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
+                          e.type === "Flat Fee"      ? "bg-blue-50 border-blue-200 text-blue-700" :
+                                                       "bg-violet-50 border-violet-200 text-violet-700"
+                        )}>{e.type}</span>
+                      </div>
+                      <div className="text-sm font-semibold text-emerald-600">+${e.amount.toFixed(2)}</div>
+                      <div className="text-xs text-gray-400 truncate">{e.notes || "—"}</div>
+                      <button onClick={() => deleteEarning(e.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                        <X className="h-3.5 w-3.5 text-gray-300 hover:text-red-400" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── WITHDRAWALS TAB ── */}
+      {tab === "withdrawals" && (
+        <div className="space-y-5">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+            <div className="h-12 w-12 shrink-0 rounded-2xl bg-amber-100 flex items-center justify-center">
+              <Download className="h-5 w-5 text-amber-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-gray-900 mb-0.5">Withdrawals</div>
+              <p className="text-xs text-gray-500">Record your payout withdrawals for bookkeeping. No calculations — just history.</p>
+            </div>
+            <button onClick={() => setWdFormOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 transition-all shadow-sm shrink-0">
+              <Plus className="h-4 w-4" /> Add Withdrawal
+            </button>
+          </div>
+
+          {/* Manual entry form */}
+          {wdFormOpen && (
+            <>
+              <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" onClick={() => setWdFormOpen(false)} />
+              <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+                <div className="w-full max-w-md bg-white rounded-3xl border border-gray-200 shadow-2xl">
+                  <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+                    <div className="text-sm font-bold text-gray-900">Add Withdrawal</div>
+                    <button onClick={() => setWdFormOpen(false)} className="p-2 rounded-full hover:bg-gray-100"><X className="h-4 w-4 text-gray-500" /></button>
+                  </div>
+                  <div className="px-6 py-5 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Date</label>
+                        <input type="date" value={wdForm.date} onChange={e => setWdForm(p => ({ ...p, date: e.target.value }))}
+                          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Amount ($)</label>
+                        <input type="number" step="0.01" min="0" value={wdForm.amount} onChange={e => setWdForm(p => ({ ...p, amount: e.target.value }))} placeholder="0.00"
+                          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Reference / Notes</label>
+                      <input value={wdForm.notes} onChange={e => setWdForm(p => ({ ...p, notes: e.target.value }))} placeholder="e.g. TikTok Shop payout, May 2026…"
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white transition-all" />
+                    </div>
+                    <button onClick={saveWithdrawal} disabled={wdSaving || !wdForm.amount}
+                      className="w-full rounded-2xl bg-amber-500 py-3 text-sm font-bold text-white hover:bg-amber-600 transition-all disabled:opacity-50">
+                      {wdSaving ? "Saving…" : "Save Withdrawal"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Summary */}
+          {withdrawals.length > 0 && (
+            <div className="flex items-center justify-end">
+              <span className="text-sm font-semibold text-gray-900">
+                Total withdrawn: <span className="text-amber-600">${withdrawals.reduce((s, w) => s + w.amount, 0).toFixed(2)}</span>
+              </span>
+            </div>
+          )}
+
+          {/* Table */}
+          {withdrawalsLoading ? (
+            <div className="flex items-center justify-center py-16"><div className="h-8 w-8 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" /></div>
+          ) : withdrawals.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center rounded-2xl border border-dashed border-gray-300 bg-white">
+              <Download className="h-12 w-12 text-gray-200 mb-3" />
+              <p className="text-sm font-semibold text-gray-700 mb-1">No withdrawals recorded</p>
+              <p className="text-xs text-gray-400 mb-5">Log your payouts for record keeping.</p>
+              <button onClick={() => setWdFormOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 transition-all">
+                <Plus className="h-4 w-4" /> Add Withdrawal
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <div className="min-w-[400px]">
+                  <div className="grid grid-cols-[1fr_1fr_2fr_40px] gap-4 px-5 py-3 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    <div>Date</div><div>Amount</div><div>Reference</div><div />
+                  </div>
+                  {withdrawals.map(w => (
+                    <div key={w.id} className="grid grid-cols-[1fr_1fr_2fr_40px] gap-4 px-5 py-4 border-b border-gray-100 hover:bg-gray-50 transition-all items-center last:border-0">
+                      <div className="text-sm text-gray-700">{w.date}</div>
+                      <div className="text-sm font-semibold text-amber-600">${w.amount.toFixed(2)}</div>
+                      <div className="text-xs text-gray-400 truncate">{w.notes || "—"}</div>
+                      <button onClick={() => deleteWithdrawal(w.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                        <X className="h-3.5 w-3.5 text-gray-300 hover:text-red-400" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── CSV CHECK TAB ── */}
       {tab === "csv-check" && (
@@ -737,14 +1245,33 @@ export default function OrdersPage() {
                           </div>
                           <div className="text-sm text-gray-700">${o.commBase.toFixed(2)}</div>
                           <div className="text-sm font-semibold text-emerald-600">+${o.estComm.toFixed(2)}</div>
-                          <div>
-                            <span className={clsx("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium", STATUS_STYLES[o.status])}>
+                          <div className="relative">
+                            <button
+                              onClick={e => { e.stopPropagation(); setStatusMenu(statusMenu === o.id ? null : o.id); }}
+                              className={clsx("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all hover:opacity-80", STATUS_STYLES[o.status])}>
                               <Icon className="h-3 w-3" />{o.status}
-                            </span>
+                              <ChevronDown className="h-3 w-3 ml-0.5 opacity-60" />
+                            </button>
+                            {statusMenu === o.id && (
+                              <div className="absolute left-0 top-full mt-1 z-30 bg-white rounded-2xl border border-gray-200 shadow-xl py-1.5 w-44"
+                                onClick={e => e.stopPropagation()}>
+                                {ALL_STATUSES.map(s => {
+                                  const SIcon = STATUS_ICONS[s];
+                                  return (
+                                    <button key={s} onClick={() => updateOrderStatus(o.id, s)}
+                                      className={clsx("w-full flex items-center gap-2.5 px-4 py-2 text-xs font-semibold transition-all hover:bg-gray-50",
+                                        o.status === s ? "opacity-40 cursor-default" : ""
+                                      )}>
+                                      <SIcon className="h-3.5 w-3.5" />
+                                      {s}
+                                      {o.status === s && <span className="ml-auto text-[9px] text-gray-400">current</span>}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                          <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-                            <ChevronDown className="h-4 w-4 text-gray-400" />
-                          </button>
+                          <div />
                         </div>
                       );
                     })}

@@ -13,6 +13,17 @@ const STAGES = [
   "Awaiting Payment", "Paid", "Completed",
 ];
 
+const COLLAB_TYPES = [
+  "TikTok Shop Affiliate",
+  "Fixed Pay",
+  "Fixed Pay + Commission",
+  "Creator Marketplace",
+  "Monthly Retainer",
+  "Product Exchange",
+  "UGC Only",
+  "Other",
+];
+
 const STAGE_STYLES: Record<string, string> = {
   "New Project":      "bg-gray-100 text-gray-500 border-gray-200",
   "Negotiating":      "bg-amber-100 text-amber-700 border-amber-200",
@@ -36,13 +47,16 @@ type Collab = {
   dueDate: string;
   contact: string;
   notes?: string;
+  deliverables?: string;
+  collabType?: string;
   userId: string;
   createdAt: string;
 };
 
 const EMPTY_FORM = {
   brand: "", product: "", stage: "New Project",
-  value: "", commission: "", dueDate: "", contact: "", notes: "",
+  value: "", commission: "", dueDate: "", contact: "",
+  collabType: "", deliverables: "", notes: "",
 };
 
 function CheckCircleIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -67,15 +81,17 @@ function CollabForm({
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(p => ({ ...p, [key]: e.target.value }));
 
+  const inputCls = "w-full rounded-xl border border-[#E9E9E2] px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:border-[#FFD567] transition-all bg-white";
+
   return (
     <div className="grid grid-cols-2 gap-3">
       {[
-        { label: "Brand Name *", key: "brand", placeholder: "e.g. GlowUp Beauty", span: true },
-        { label: "Campaign / Product *", key: "product", placeholder: "e.g. Hydra Serum Launch", span: true },
-        { label: "Deal Value ($)", key: "value", placeholder: "1200", type: "number" },
-        { label: "Commission (%)", key: "commission", placeholder: "8", type: "number" },
-        { label: "Due Date", key: "dueDate", type: "date" },
-        { label: "Contact Person", key: "contact", placeholder: "Sarah M." },
+        { label: "Brand Name *",         key: "brand",      placeholder: "e.g. GlowUp Beauty",       span: true },
+        { label: "Campaign / Product *", key: "product",    placeholder: "e.g. Hydra Serum Launch",   span: true },
+        { label: "Deal Value ($)",       key: "value",      placeholder: "1200", type: "number" },
+        { label: "Commission (%)",       key: "commission", placeholder: "8",    type: "number" },
+        { label: "Due Date",             key: "dueDate",    type: "date" },
+        { label: "Contact Person",       key: "contact",    placeholder: "Sarah M." },
       ].map(({ label, key, placeholder, type, span }) => (
         <div key={key} className={span ? "col-span-2" : ""}>
           <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">{label}</label>
@@ -84,20 +100,40 @@ function CollabForm({
             value={form[key as keyof typeof EMPTY_FORM]}
             onChange={field(key as keyof typeof EMPTY_FORM)}
             placeholder={placeholder}
-            className="w-full rounded-xl border border-[#E9E9E2] px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:border-[#FFD567] transition-all"
+            className={inputCls}
           />
         </div>
       ))}
+
+      {/* Collab Type */}
+      <div className="col-span-2">
+        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Collab Type</label>
+        <select value={form.collabType} onChange={field("collabType")} className={inputCls}>
+          <option value="">Select type…</option>
+          {COLLAB_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+
+      {/* Stage */}
       <div className="col-span-2">
         <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Stage</label>
-        <select value={form.stage} onChange={field("stage")}
-          className="w-full rounded-xl border border-[#E9E9E2] px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:border-[#FFD567] transition-all bg-white">
+        <select value={form.stage} onChange={field("stage")} className={inputCls}>
           {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
+
+      {/* Deliverables */}
+      <div className="col-span-2">
+        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Deliverables</label>
+        <textarea value={form.deliverables} onChange={field("deliverables")} rows={2}
+          placeholder="e.g. 3 TikTok videos, 1 livestream + 5 short clips"
+          className="w-full rounded-xl border border-[#E9E9E2] px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:border-[#FFD567] transition-all resize-none" />
+      </div>
+
+      {/* Notes */}
       <div className="col-span-2">
         <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Notes</label>
-        <textarea value={form.notes} onChange={field("notes")} rows={3} placeholder="Optional notes…"
+        <textarea value={form.notes} onChange={field("notes")} rows={2} placeholder="Optional notes…"
           className="w-full rounded-xl border border-[#E9E9E2] px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:border-[#FFD567] transition-all resize-none" />
       </div>
     </div>
@@ -160,6 +196,7 @@ export default function CollabsPage() {
   const [view, setView] = useState<"list" | "board">("list");
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("All");
+  const [typeFilter,  setTypeFilter]  = useState("All");
   const [createOpen, setCreateOpen] = useState(false);
   const [editCollab, setEditCollab] = useState<Collab | null>(null);
   const [saving, setSaving] = useState(false);
@@ -231,13 +268,16 @@ export default function CollabsPage() {
           dueDate: form.dueDate,
           contact: form.contact,
           notes: form.notes,
+          deliverables: form.deliverables,
+          collabType: form.collabType,
         }),
       });
       setCollabs(prev => prev.map(c =>
         c.id === editCollab.id
           ? { ...c, brand: form.brand, product: form.product, stage: form.stage,
               value: Number(form.value) || 0, commission: Number(form.commission) || 0,
-              dueDate: form.dueDate, contact: form.contact, notes: form.notes }
+              dueDate: form.dueDate, contact: form.contact, notes: form.notes,
+              deliverables: form.deliverables, collabType: form.collabType }
           : c
       ));
       setEditCollab(null);
@@ -273,6 +313,7 @@ export default function CollabsPage() {
       brand: c.brand, product: c.product, stage: c.stage,
       value: String(c.value), commission: String(c.commission),
       dueDate: c.dueDate, contact: c.contact, notes: c.notes || "",
+      deliverables: c.deliverables || "", collabType: c.collabType || "",
     });
   }
 
@@ -285,6 +326,7 @@ export default function CollabsPage() {
 
   const filtered = collabs.filter(c => {
     if (stageFilter !== "All" && c.stage !== stageFilter) return false;
+    if (typeFilter  !== "All" && c.collabType !== typeFilter) return false;
     const q = search.toLowerCase();
     if (q && !c.brand.toLowerCase().includes(q) && !c.product.toLowerCase().includes(q)) return false;
     return true;
@@ -350,6 +392,14 @@ export default function CollabsPage() {
                 placeholder="Search brand or product…"
                 className="w-full rounded-2xl border border-[#E9E9E2] bg-white pl-10 pr-4 py-2.5 text-sm text-[#1A1A1A] placeholder-gray-400 outline-none focus:border-[#FFD567] transition-all shadow-sm" />
             </div>
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+              className="hidden sm:block rounded-2xl border border-[#E9E9E2] bg-white px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:border-[#FFD567] transition-all shadow-sm shrink-0 font-medium"
+            >
+              <option value="All">All types</option>
+              {COLLAB_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
             <div className="flex bg-white rounded-2xl border border-[#E9E9E2] p-1 shadow-sm shrink-0">
               <button onClick={() => setView("list")}
                 className={clsx("p-2 rounded-xl transition-all", view === "list" ? "bg-[#1A1A1A] text-white" : "text-gray-400 hover:text-[#1A1A1A]")}>
@@ -417,6 +467,11 @@ export default function CollabsPage() {
                         <td className="px-4 sm:px-6 py-4">
                           <div className="text-sm font-bold text-[#1A1A1A]">{c.brand}</div>
                           <div className="text-xs text-gray-400 font-medium">{c.product}</div>
+                          {c.collabType && (
+                            <span className="mt-1 inline-block rounded-full bg-[#FFD567]/20 border border-[#FFD567]/40 px-2 py-0.5 text-[9px] font-bold text-[#1A1A1A] uppercase tracking-wide">
+                              {c.collabType}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 sm:px-6 py-4">
                           <select value={c.stage}
@@ -480,7 +535,15 @@ export default function CollabsPage() {
                             onDragStart={() => onDragStart(c.id)}
                             className="bento-card p-4 bg-white hover:scale-[1.02] cursor-grab active:cursor-grabbing shadow-sm">
                             <div className="text-sm font-bold text-[#1A1A1A] mb-1">{c.brand}</div>
-                            <div className="text-[10px] text-gray-400 font-medium mb-4">{c.product}</div>
+                            <div className="text-[10px] text-gray-400 font-medium mb-2">{c.product}</div>
+                            {c.collabType && (
+                              <span className="mb-3 inline-block rounded-full bg-[#FFD567]/20 border border-[#FFD567]/40 px-2 py-0.5 text-[9px] font-bold text-[#1A1A1A] uppercase tracking-wide">
+                                {c.collabType}
+                              </span>
+                            )}
+                            {c.deliverables && (
+                              <div className="text-[10px] text-gray-400 mb-3 line-clamp-1">{c.deliverables}</div>
+                            )}
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-bold text-[#1A1A1A]">${c.value.toLocaleString()}</span>
                               <span className="text-[10px] text-gray-400 flex items-center gap-1 font-medium">

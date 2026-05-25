@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import clsx from "clsx";
 import {
   Plus, Search, Package, Clock, CheckCircle2, XCircle,
-  AlertTriangle, Video, Zap, Star, MoreHorizontal, X, ImageIcon, Loader2,
+  AlertTriangle, Video, Zap, Star, MoreHorizontal, X, ImageIcon, Loader2, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
@@ -58,6 +58,112 @@ function fmtDate(iso: string): string {
   try {
     return new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   } catch { return iso; }
+}
+
+type PendingSample = {
+  product: string; collab: string; receivedDate: string; dueDate: string; notes: string;
+  type: SampleType; fulfillment: Fulfillment; status: SampleStatus;
+};
+
+function BatchReviewModal({
+  items: initial, onClose, onConfirm,
+}: {
+  items: PendingSample[];
+  onClose: () => void;
+  onConfirm: (items: PendingSample[]) => Promise<void>;
+}) {
+  const [items, setItems] = useState(initial);
+  const [saving, setSaving] = useState(false);
+
+  const update = (i: number, key: keyof PendingSample, val: string) =>
+    setItems(prev => prev.map((s, idx) => idx === i ? { ...s, [key]: val } : s));
+  const remove = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i));
+
+  const valid = items.filter(s => s.product.trim());
+
+  async function handleConfirm() {
+    if (!valid.length) return;
+    setSaving(true);
+    try { await onConfirm(valid); } finally { setSaving(false); }
+  }
+
+  const inputCls = "w-full rounded-xl border border-[#E9E9E2] px-3 py-2 text-sm text-[#1A1A1A] outline-none focus:border-violet-300 transition-all bg-white";
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-0">
+        <div className="w-full max-w-2xl bg-white rounded-[24px] shadow-2xl border border-[#E9E9E2] overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-[#E9E9E2] shrink-0">
+            <div>
+              <h2 className="text-base font-bold text-[#1A1A1A]">Review Extracted Samples</h2>
+              <p className="text-xs text-emerald-600 font-bold mt-0.5">
+                ✓ {items.length} sample{items.length !== 1 ? "s" : ""} detected — edit or remove before importing
+              </p>
+            </div>
+            <button onClick={onClose} className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {items.length === 0 ? (
+              <p className="text-center text-sm text-gray-400 py-8">All samples removed. Close to cancel.</p>
+            ) : items.map((s, i) => (
+              <div key={i} className="rounded-2xl border border-[#E9E9E2] p-4 space-y-3 relative">
+                <button onClick={() => remove(i)}
+                  className="absolute right-4 top-4 h-6 w-6 rounded-full hover:bg-red-50 flex items-center justify-center text-gray-300 hover:text-red-400 transition-all">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Sample {i + 1}</div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Product Name *</label>
+                  <input value={s.product} onChange={e => update(i, "product", e.target.value)} placeholder="Product name" className={inputCls} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Brand / Collab</label>
+                    <input value={s.collab} onChange={e => update(i, "collab", e.target.value)} placeholder="Brand name" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Sample Type</label>
+                    <select value={s.type} onChange={e => update(i, "type", e.target.value)} className={inputCls}>
+                      <option>Free sample</option>
+                      <option>Refundable sample</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Received Date</label>
+                    <input type="date" value={s.receivedDate} onChange={e => update(i, "receivedDate", e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Due Date</label>
+                    <input type="date" value={s.dueDate} onChange={e => update(i, "dueDate", e.target.value)} className={inputCls} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Notes</label>
+                  <textarea value={s.notes} onChange={e => update(i, "notes", e.target.value)} rows={2}
+                    className="w-full rounded-xl border border-[#E9E9E2] px-3 py-2 text-sm text-[#1A1A1A] outline-none focus:border-violet-300 transition-all resize-none" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-3 px-6 py-4 border-t border-[#E9E9E2] shrink-0">
+            <button onClick={onClose}
+              className="flex-1 rounded-xl border border-[#E9E9E2] py-2.5 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-all">
+              Cancel
+            </button>
+            <button onClick={handleConfirm} disabled={saving || valid.length === 0}
+              className="flex-1 rounded-xl bg-gradient-to-r from-violet-600 to-pink-500 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50 transition-all">
+              {saving ? "Importing…" : `Import ${valid.length} Sample${valid.length !== 1 ? "s" : ""}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
 }
 
 function SampleModal({
@@ -163,8 +269,10 @@ export default function SamplesPage() {
   const [saving,      setSaving]      = useState(false);
   const [form,        setForm]        = useState(EMPTY_FORM);
   const [menuOpen,    setMenuOpen]    = useState<string | null>(null);
-  const [ocrLoading,  setOcrLoading]  = useState(false);
-  const [ocrError,    setOcrError]    = useState<string | null>(null);
+  const [statusMenu,  setStatusMenu]  = useState<string | null>(null);
+  const [ocrLoading,     setOcrLoading]     = useState(false);
+  const [ocrError,       setOcrError]       = useState<string | null>(null);
+  const [pendingSamples, setPendingSamples] = useState<PendingSample[] | null>(null);
   const imgRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -178,6 +286,13 @@ export default function SamplesPage() {
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, [menuOpen]);
+
+  useEffect(() => {
+    if (!statusMenu) return;
+    const close = () => setStatusMenu(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [statusMenu]);
 
   async function fetchSamples() {
     setLoading(true);
@@ -262,24 +377,36 @@ export default function SamplesPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "OCR failed");
 
-      const d = json.data as { product?: string; collab?: string; receivedDate?: string; dueDate?: string; notes?: string };
-      setForm({
+      const raw = json.data;
+      const arr: PendingSample[] = (Array.isArray(raw) ? raw : [raw]).map((d: any) => ({
         product:      d.product      ?? "",
-        type:         "Free sample",
-        fulfillment:  "Video",
-        status:       "Needs content",
+        collab:       d.collab       ?? "",
         receivedDate: d.receivedDate ?? "",
         dueDate:      d.dueDate      ?? "",
-        collab:       d.collab       ?? "",
         notes:        d.notes        ?? "",
-      });
-      setCreateOpen(true);
+        type:         "Free sample" as SampleType,
+        fulfillment:  "Video" as Fulfillment,
+        status:       "Needs content" as SampleStatus,
+      }));
+      setPendingSamples(arr);
     } catch (err: any) {
       setOcrError(err.message ?? "Could not read screenshot. Try again.");
     } finally {
       setOcrLoading(false);
       if (imgRef.current) imgRef.current.value = "";
     }
+  }
+
+  async function confirmBatch(pending: PendingSample[]) {
+    await Promise.all(pending.map(s =>
+      fetch("/api/samples", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...s, collab: s.collab.trim() || null }),
+      })
+    ));
+    setPendingSamples(null);
+    await fetchSamples();
   }
 
   function openEdit(s: Sample) {
@@ -308,6 +435,13 @@ export default function SamplesPage() {
 
   return (
     <>
+      {pendingSamples && (
+        <BatchReviewModal
+          items={pendingSamples}
+          onClose={() => setPendingSamples(null)}
+          onConfirm={confirmBatch}
+        />
+      )}
       {createOpen && (
         <SampleModal
           title="Add Sample"
@@ -486,7 +620,27 @@ export default function SamplesPage() {
                   {/* Badges */}
                   <div className="flex flex-wrap gap-1.5 mb-4">
                     <span className={clsx("rounded-lg border px-2 py-0.5 text-[10px] font-semibold", TYPE_STYLES[s.type])}>{s.type}</span>
-                    <span className={clsx("rounded-lg border px-2 py-0.5 text-[10px] font-semibold", STATUS_STYLES[s.status])}>{s.status}</span>
+                    <div className="relative">
+                      <button
+                        onClick={e => { e.stopPropagation(); setStatusMenu(statusMenu === s.id ? null : s.id); }}
+                        className={clsx("flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-semibold transition-all hover:opacity-80", STATUS_STYLES[s.status])}>
+                        {s.status} <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+                      </button>
+                      {statusMenu === s.id && (
+                        <div className="absolute left-0 top-full mt-1 z-30 bg-white rounded-xl border border-gray-200 shadow-xl py-1.5 w-40"
+                          onClick={e => e.stopPropagation()}>
+                          {(["Needs content", "Completed", "Canceled"] as SampleStatus[]).map(st => (
+                            <button key={st} onClick={() => { updateStatus(s.id, st); setStatusMenu(null); }}
+                              className={clsx("w-full text-left px-3 py-2 text-xs font-semibold transition-all hover:bg-gray-50 flex items-center justify-between",
+                                s.status === st ? "opacity-40 cursor-default" : ""
+                              )}>
+                              {st}
+                              {s.status === st && <span className="text-[9px] text-gray-400">current</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <span className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] text-gray-600">
                       <FIcon className="h-3 w-3" /> {s.fulfillment}
                     </span>

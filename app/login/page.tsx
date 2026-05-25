@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged } from "firebase/auth";
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { TrendingUp, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, CheckCircle } from "lucide-react";
 
@@ -25,13 +25,6 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const redirectTo   = searchParams.get("from") ?? "/dashboard";
   const notice       = searchParams.get("notice");
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) router.replace("/dashboard");
-    });
-    return unsub;
-  }, []);
 
   const [mode, setMode] = useState<"login" | "reset">("login");
 

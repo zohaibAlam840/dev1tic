@@ -15,9 +15,13 @@ Include every visible product row.`,
 [{"id":"ORDER_ID","product":"Product Name","date":"YYYY-MM-DD","gmv":42.00,"commission":3.36,"status":"Paid"}]
 Status must be one of: Paid, Missing, Returned/Canceled, Flag. Extract every visible row.`,
 
-  samples: `Extract product sample details from this screenshot (TikTok message, email, or brand portal page). Return ONLY a JSON object, no markdown:
-{"product":"Full product name","collab":"Brand or company name or empty string","receivedDate":"YYYY-MM-DD or empty string","dueDate":"YYYY-MM-DD or empty string","notes":"content requirements, deadlines, or other details or empty string"}
-Convert all dates to YYYY-MM-DD format. Use empty string for any field not visible.`,
+  earnings: `Extract earnings/revenue entries from this TikTok Shop screenshot. Return ONLY a JSON array, no markdown:
+[{"date":"YYYY-MM-DD","amount":0,"type":"Daily Revenue","notes":""}]
+Type must be one of: Daily Revenue, Flat Fee, Rewards. Default to "Daily Revenue" if unclear. Extract every visible row. Use empty string for notes if not visible.`,
+
+  samples: `Extract ALL product sample details from this screenshot (TikTok message, email, or brand portal page). Return ONLY a JSON array, no markdown:
+[{"product":"Full product name","collab":"Brand or company name or empty string","receivedDate":"YYYY-MM-DD or empty string","dueDate":"YYYY-MM-DD or empty string","notes":"content requirements, deadlines, or other details or empty string"}]
+If only one product is visible, return a single-element array. Convert all dates to YYYY-MM-DD format. Use empty string for any field not visible.`,
 };
 
 export async function POST(req: NextRequest) {

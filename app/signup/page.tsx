@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword, onAuthStateChanged, deleteUser } from "firebase/auth";
+import { createUserWithEmailAndPassword, deleteUser } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { TrendingUp, Mail, Lock, Eye, EyeOff, User, ArrowRight, CheckCircle } from "lucide-react";
 
@@ -21,13 +21,6 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export default function SignupPage() {
   const router = useRouter();
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) router.replace("/dashboard");
-    });
-    return unsub;
-  }, []);
 
   const [name,     setName]     = useState("");
   const [email,    setEmail]    = useState("");
@@ -80,8 +73,8 @@ export default function SignupPage() {
         return;
       }
 
-      // 5. Redirect to dashboard
-      router.push("/dashboard");
+      // 5. Redirect to onboarding so new admin can name their workspace
+      router.push("/onboarding");
     } catch (err: any) {
       const code = err?.code as string | undefined;
       console.error("[signup] error:", err);

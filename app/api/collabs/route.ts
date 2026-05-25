@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { brand, product, stage = "New Project", value, commission, dueDate, contact, notes } = await req.json();
+    const { brand, product, stage = "New Project", value, commission, dueDate, contact, notes, deliverables, collabType } = await req.json();
 
     if (!brand?.trim() || !product?.trim()) {
       return NextResponse.json({ error: "Brand and product are required." }, { status: 400 });
@@ -45,11 +45,13 @@ export async function POST(req: NextRequest) {
       brand:     brand.trim(),
       product:   product.trim(),
       stage,
-      value:      Number(value) || 0,
-      commission: Number(commission) || 0,
-      dueDate:   dueDate || "",
-      contact:   contact?.trim() || "",
-      notes:     notes?.trim() || "",
+      value:        Number(value) || 0,
+      commission:   Number(commission) || 0,
+      dueDate:      dueDate || "",
+      contact:      contact?.trim() || "",
+      notes:        notes?.trim() || "",
+      deliverables: deliverables?.trim() || "",
+      collabType:   collabType?.trim() || "",
       createdAt: now,
       updatedAt: now,
     });

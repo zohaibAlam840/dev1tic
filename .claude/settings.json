@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"^c:\\\\\\\\Users.*/\\(app|lib|components\\)\")",
+      "Bash(xargs grep *)"
+    ]
+  }
+}

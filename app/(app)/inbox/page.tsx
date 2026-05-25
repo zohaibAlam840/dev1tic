@@ -55,7 +55,175 @@ const STATUS_LABELS: Record<Status, string> = {
   open: "Open", in_progress: "In Progress", done: "Done",
 };
 
-// ── Add Message Modal ────────────────────────────────────────────────────────
+// ── Collab types ─────────────────────────────────────────────────────────────
+const COLLAB_TYPES = [
+  "TikTok Shop Affiliate", "Fixed Pay", "Fixed Pay + Commission",
+  "Creator Marketplace", "Monthly Retainer", "Product Exchange", "UGC Only", "Other",
+];
+
+// ── Create Collab Modal ───────────────────────────────────────────────────────
+function CreateCollabModal({
+  item, onClose, onCreated,
+}: {
+  item: InboxItem;
+  onClose: () => void;
+  onCreated: (collabId: string, collabName: string) => void;
+}) {
+  const [extracting, setExtracting] = useState(true);
+  const [extractError, setExtractError] = useState("");
+  const [brand, setBrand] = useState("");
+  const [product, setProduct] = useState("");
+  const [value, setValue] = useState("");
+  const [commission, setCommission] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [contact, setContact] = useState("");
+  const [collabType, setCollabType] = useState("");
+  const [notes, setNotes] = useState("");
+  const [deliverables, setDeliverables] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function extract() {
+      if (!item.body?.trim()) { setExtracting(false); return; }
+      try {
+        const res = await fetch("/api/extract-collab", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: item.body }),
+        });
+        if (res.ok) {
+          const { data } = await res.json();
+          if (data) {
+            setBrand(data.brand || "");
+            setProduct(data.product || "");
+            setValue(data.value ? String(data.value) : "");
+            setCommission(data.commission ? String(data.commission) : "");
+            setDueDate(data.dueDate || "");
+            setContact(data.contact || "");
+            setCollabType(data.collabType || "");
+            setNotes(data.notes || "");
+            setDeliverables(data.deliverables || "");
+          }
+        } else {
+          setExtractError("Could not extract — fill in manually.");
+        }
+      } catch {
+        setExtractError("Could not extract — fill in manually.");
+      } finally {
+        setExtracting(false);
+      }
+    }
+    extract();
+  }, [item.body]);
+
+  async function handleSave() {
+    if (!brand.trim() || !product.trim()) { setError("Brand and product are required."); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/collabs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brand, product, value, commission, dueDate, contact, collabType, notes, deliverables }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed"); }
+      const { id } = await res.json();
+      onCreated(id, `${brand.trim()} — ${product.trim()}`);
+    } catch (e: any) {
+      setError(e.message || "Failed to create collab.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg bg-white rounded-[32px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+          <div>
+            <h3 className="text-lg font-bold text-[#1A1A1A]">Create Collab</h3>
+            {!extracting && !extractError && item.body?.trim() && (
+              <p className="text-xs text-emerald-600 font-bold mt-0.5">✓ AI pre-filled from message</p>
+            )}
+            {extractError && <p className="text-xs text-amber-600 font-bold mt-0.5">{extractError}</p>}
+          </div>
+          <button onClick={onClose} className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center">
+            <X className="h-4 w-4 text-gray-500" />
+          </button>
+        </div>
+
+        {extracting ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <div className="h-8 w-8 rounded-full border-2 border-[#FFD567] border-t-transparent animate-spin" />
+            <p className="text-sm font-bold text-gray-400">Extracting details from message...</p>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Brand *</label>
+                <input value={brand} onChange={e => setBrand(e.target.value)} placeholder="Brand name"
+                  className="mt-1 w-full rounded-2xl border border-[#E9E9E2] bg-[#F7F7F2] px-4 py-2.5 text-sm text-[#1A1A1A] outline-none focus:bg-white focus:border-[#1A1A1A] transition-all" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Campaign / Product *</label>
+                <input value={product} onChange={e => setProduct(e.target.value)} placeholder="Product or campaign"
+                  className="mt-1 w-full rounded-2xl border border-[#E9E9E2] bg-[#F7F7F2] px-4 py-2.5 text-sm text-[#1A1A1A] outline-none focus:bg-white focus:border-[#1A1A1A] transition-all" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Deal Value ($)</label>
+                <input type="number" value={value} onChange={e => setValue(e.target.value)} placeholder="0"
+                  className="mt-1 w-full rounded-2xl border border-[#E9E9E2] bg-[#F7F7F2] px-4 py-2.5 text-sm text-[#1A1A1A] outline-none focus:bg-white focus:border-[#1A1A1A] transition-all" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Commission (%)</label>
+                <input type="number" value={commission} onChange={e => setCommission(e.target.value)} placeholder="0"
+                  className="mt-1 w-full rounded-2xl border border-[#E9E9E2] bg-[#F7F7F2] px-4 py-2.5 text-sm text-[#1A1A1A] outline-none focus:bg-white focus:border-[#1A1A1A] transition-all" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Due Date</label>
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                  className="mt-1 w-full rounded-2xl border border-[#E9E9E2] bg-[#F7F7F2] px-4 py-2.5 text-sm text-[#1A1A1A] outline-none focus:bg-white focus:border-[#1A1A1A] transition-all" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Contact</label>
+                <input value={contact} onChange={e => setContact(e.target.value)} placeholder="Contact person"
+                  className="mt-1 w-full rounded-2xl border border-[#E9E9E2] bg-[#F7F7F2] px-4 py-2.5 text-sm text-[#1A1A1A] outline-none focus:bg-white focus:border-[#1A1A1A] transition-all" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Collab Type</label>
+                <select value={collabType} onChange={e => setCollabType(e.target.value)}
+                  className="mt-1 w-full rounded-2xl border border-[#E9E9E2] bg-[#F7F7F2] px-4 py-2.5 text-sm text-[#1A1A1A] outline-none focus:bg-white focus:border-[#1A1A1A] transition-all">
+                  <option value="">Select type...</option>
+                  {COLLAB_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Deliverables</label>
+                <textarea value={deliverables} onChange={e => setDeliverables(e.target.value)} rows={2}
+                  placeholder="What content is required..."
+                  className="mt-1 w-full rounded-2xl border border-[#E9E9E2] bg-[#F7F7F2] px-4 py-2.5 text-sm text-[#1A1A1A] outline-none focus:bg-white focus:border-[#1A1A1A] transition-all resize-none" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Notes</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+                  placeholder="Additional details..."
+                  className="mt-1 w-full rounded-2xl border border-[#E9E9E2] bg-[#F7F7F2] px-4 py-2.5 text-sm text-[#1A1A1A] outline-none focus:bg-white focus:border-[#1A1A1A] transition-all resize-none" />
+              </div>
+            </div>
+            {error && <p className="text-xs font-bold text-red-500">{error}</p>}
+            <button onClick={handleSave} disabled={saving}
+              className="w-full rounded-2xl bg-[#1A1A1A] py-3.5 text-sm font-bold text-white hover:bg-black transition-all disabled:opacity-50 mt-2">
+              {saving ? "Creating..." : "Create Collab"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Add Message Modal ─────────────────────────────────────────────────────────
 function AddModal({
   onClose, onSave,
 }: {
@@ -176,7 +344,8 @@ export default function InboxPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selected, setSelected]     = useState<string | null>(null);
   const [search, setSearch]         = useState("");
-  const [showModal, setShowModal]   = useState(false);
+  const [showModal, setShowModal]         = useState(false);
+  const [showCollabModal, setShowCollabModal] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
 
   const fetchItems = useCallback(async () => {
@@ -237,6 +406,16 @@ export default function InboxPage() {
   return (
     <>
       {showModal && <AddModal onClose={() => setShowModal(false)} onSave={handleAdd} />}
+      {showCollabModal && selectedItem && (
+        <CreateCollabModal
+          item={selectedItem}
+          onClose={() => setShowCollabModal(false)}
+          onCreated={(collabId, collabName) => {
+            patchItem(selectedItem.id, { collabId, collabName });
+            setShowCollabModal(false);
+          }}
+        />
+      )}
 
       <div className="flex h-[calc(100dvh-180px)] lg:h-[calc(100vh-130px)] gap-4 sm:gap-6">
 
@@ -437,12 +616,12 @@ export default function InboxPage() {
               ) : (
                 <div className="flex-1" />
               )}
-              <Link
-                href="/collabs"
+              <button
+                onClick={() => setShowCollabModal(true)}
                 className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-[#FFD567] py-4 text-sm font-bold text-[#1A1A1A] hover:opacity-90 transition-all shadow-lg shadow-amber-200/50"
               >
                 <Zap className="h-4 w-4" /> Create Collab
-              </Link>
+              </button>
               <button
                 onClick={() => patchItem(selectedItem.id, { status: "done" })}
                 disabled={selectedItem.status === "done" || actionBusy}

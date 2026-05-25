@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import {
   TrendingUp, DollarSign, ShoppingBag, Zap,
-  AlertTriangle, Calendar, Shield, Clock,
+  AlertTriangle, Calendar, Shield, Clock, ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
 import { doc, getDoc } from "firebase/firestore";
@@ -120,6 +120,23 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+
+      {/* Setup banner — shown to admins with an empty workspace */}
+      {isAdmin && !loadingDash && data && data.collabs.active === 0 && data.orders.total === 0 && (
+        <Link
+          href="/admin"
+          className="flex items-center gap-4 rounded-2xl border border-[#1A1A1A] bg-[#1A1A1A] px-5 py-4 shadow-sm group"
+        >
+          <div className="h-9 w-9 rounded-xl bg-[#FFD567] flex items-center justify-center shrink-0">
+            <Shield className="h-4 w-4 text-[#1A1A1A]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-white">Your workspace is ready — invite your first creator</p>
+            <p className="text-xs text-gray-400 mt-0.5">Go to the Admin panel to add team members and manage your workspace.</p>
+          </div>
+          <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-white transition-colors shrink-0" />
+        </Link>
+      )}
 
       {/* Workspace banner — shown to invited creators */}
       {!isAdmin && ownerName && (

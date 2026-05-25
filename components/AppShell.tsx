@@ -229,8 +229,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const isAdmin   = profile?.role === "admin";
   const isManager = profile?.role === "manager";
-  const MORE      = (isAdmin || isManager) ? [...MORE_BASE, ADMIN_ITEM] : MORE_BASE;
-  const allNav    = [...NAV, ...MORE];
+  const MORE      = MORE_BASE;
+  const allNav    = [...NAV, ADMIN_ITEM, ...MORE_BASE];
   const pageTitle = allNav.find(n => pathname === n.href || pathname.startsWith(n.href + "/"))?.label ?? "Dashboard";
 
   const displayName    = profile?.name ?? "User";
@@ -340,6 +340,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <NavItem key={item.href} {...item} onClick={() => setSidebarOpen(false)}
               badge={item.href === "/inbox" ? inboxBadge : undefined} />
           ))}
+
+          {/* Admin — shown directly in nav for admin/manager */}
+          {(isAdmin || isManager) && (
+            <>
+              <div className="my-3 mx-2 border-t border-[#E9E9E2]" />
+              <NavItem {...ADMIN_ITEM} onClick={() => setSidebarOpen(false)} />
+            </>
+          )}
+
           <div className="my-3 mx-2 border-t border-[#E9E9E2]" />
           {MORE.map(item => (
             <NavItem key={item.href} {...item} onClick={() => setSidebarOpen(false)} />

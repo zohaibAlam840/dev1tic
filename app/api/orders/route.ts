@@ -61,3 +61,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to save orders" }, { status: 500 });
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  const caller = await getCallerProfile(req);
+  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const { id, status } = await req.json();
+    if (!id || !status) return NextResponse.json({ error: "Missing id or status" }, { status: 400 });
+
+    const docId = `${caller.uid}_${id}`;
+    await adminDb.collection("orders").doc(docId).update({ status, updatedAt: new Date().toISOString() });
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("[orders_patch]", err);
+    return NextResponse.json({ error: "Failed to update order" }, { status: 500 });
+  }
+}
