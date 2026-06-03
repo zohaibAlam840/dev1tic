@@ -271,9 +271,11 @@ export default function SamplesPage() {
   const [menuOpen,    setMenuOpen]    = useState<string | null>(null);
   const [statusMenu,  setStatusMenu]  = useState<string | null>(null);
   const [ocrLoading,     setOcrLoading]     = useState(false);
+  const [ocrIsVideo,     setOcrIsVideo]     = useState(false);
   const [ocrError,       setOcrError]       = useState<string | null>(null);
   const [pendingSamples, setPendingSamples] = useState<PendingSample[] | null>(null);
-  const imgRef = useRef<HTMLInputElement>(null);
+  const imgRef   = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!profile) return;
@@ -367,7 +369,21 @@ export default function SamplesPage() {
   }
 
   async function handleOCRUpload(file: File) {
+    const isVideo = file.type.startsWith("video/");
+
+    // Client-side size guard before even hitting the server
+    const maxBytes = isVideo ? 50 * 1024 * 1024 : 20 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setOcrError(isVideo
+        ? `Video is too large (${(file.size / 1024 / 1024).toFixed(0)} MB). Maximum is 50 MB.`
+        : `Image is too large (${(file.size / 1024 / 1024).toFixed(0)} MB). Maximum is 20 MB.`
+      );
+      if (imgRef.current) imgRef.current.value = "";
+      return;
+    }
+
     setOcrLoading(true);
+    setOcrIsVideo(isVideo);
     setOcrError(null);
     try {
       const fd = new FormData();
@@ -393,7 +409,8 @@ export default function SamplesPage() {
       setOcrError(err.message ?? "Could not read screenshot. Try again.");
     } finally {
       setOcrLoading(false);
-      if (imgRef.current) imgRef.current.value = "";
+      if (imgRef.current)   imgRef.current.value   = "";
+      if (videoRef.current) videoRef.current.value = "";
     }
   }
 
@@ -474,21 +491,27 @@ export default function SamplesPage() {
             <p className="text-xs text-gray-400 mt-0.5">Track product samples and content deadlines</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* OCR import */}
-            <input
-              ref={imgRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleOCRUpload(f); }}
-            />
-            <button
-              onClick={() => imgRef.current?.click()}
-              disabled={ocrLoading}
+            {/* Screenshot import */}
+            <input ref={imgRef} type="file" accept="image/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleOCRUpload(f); e.target.value = ""; }} />
+
+            {/* Video import */}
+            <input ref={videoRef} type="file" accept="video/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleOCRUpload(f); e.target.value = ""; }} />
+
+            <button onClick={() => imgRef.current?.click()} disabled={ocrLoading}
               className="flex items-center gap-2 rounded-xl border border-[#E9E9E2] bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed w-fit">
-              {ocrLoading
+              {ocrLoading && !ocrIsVideo
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Reading…</>
                 : <><ImageIcon className="h-4 w-4" /> Import Screenshot</>
+              }
+            </button>
+
+            <button onClick={() => videoRef.current?.click()} disabled={ocrLoading}
+              className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-100 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed w-fit">
+              {ocrLoading && ocrIsVideo
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing video…</>
+                : <><Video className="h-4 w-4" /> Import Video</>
               }
             </button>
             <button

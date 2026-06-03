@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
     "google-auth-library",
     "@opentelemetry/api",
   ],
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "55mb", // covers 50 MB video + multipart overhead
+    },
+  },
 };
 
 export default nextConfig;
