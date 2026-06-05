@@ -292,8 +292,10 @@ export default function OrdersPage() {
   const [wdFormOpen,         setWdFormOpen]         = useState(false);
   const [wdSaving,           setWdSaving]           = useState(false);
 
-  const ordersRef  = useRef<HTMLInputElement>(null);
-  const settledRef = useRef<HTMLInputElement>(null);
+  const ordersRef   = useRef<HTMLInputElement>(null);
+  const settledRef  = useRef<HTMLInputElement>(null);
+  const csvXlsxRef  = useRef<HTMLInputElement>(null);
+  const [csvImportError, setCsvImportError] = useState<string | null>(null);
 
   // Fetch earnings when tab opens
   useEffect(() => {
@@ -499,6 +501,83 @@ export default function OrdersPage() {
     e.target.value = "";
   }
 
+  async function handleCsvXlsxImport(file: File) {
+    setCsvImportError(null);
+    const name = file.name.toLowerCase();
+    const isXlsx = name.endsWith(".xlsx") || name.endsWith(".xls");
+    const isCsv  = name.endsWith(".csv");
+
+    if (!isXlsx && !isCsv) {
+      setCsvImportError("Please upload a .csv, .xls, or .xlsx file.");
+      return;
+    }
+
+    try {
+      let rows: CSVRow[];
+
+      if (isCsv) {
+        const text = await file.text();
+        rows = parseCSVText(text);
+      } else {
+        // Excel — use xlsx library (imported dynamically to keep client bundle lean)
+        const XLSX = await import("xlsx");
+        const buf  = await file.arrayBuffer();
+        const wb   = XLSX.read(buf, { type: "array", cellDates: true });
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        const raw  = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: "" });
+
+        // Normalise column names the same way parseCSVText does
+        function col(row: Record<string, any>, ...candidates: string[]): string {
+          for (const c of candidates) {
+            const key = Object.keys(row).find(k => k.trim().toLowerCase() === c);
+            if (key !== undefined && row[key] !== undefined && row[key] !== "") {
+              return String(row[key]).trim();
+            }
+          }
+          return "";
+        }
+
+        rows = raw.map(row => {
+          const id      = col(row, "order id", "orderid", "order_id", "id");
+          const product = col(row, "product name", "productname", "product_name", "item name", "sku name", "product");
+          const dateRaw = col(row, "order create time", "order date", "date", "created at", "order_date");
+          const gmvRaw  = col(row, "gmv", "settlement amount", "order amount", "total amount", "commission base amount", "item price");
+          const commRaw = col(row, "estimated commission", "commission", "est. commission", "estimated_commission");
+          return {
+            id:         id      || `IMPORT-${Math.random().toString(36).slice(2,8).toUpperCase()}`,
+            product:    product || "—",
+            date:       dateRaw || "—",
+            gmv:        parseFloat(String(gmvRaw).replace(/[^0-9.]/g, ""))  || 0,
+            commission: parseFloat(String(commRaw).replace(/[^0-9.]/g, "")) || 0,
+          };
+        }).filter(r => r.id);
+      }
+
+      if (rows.length === 0) {
+        setCsvImportError("No valid order rows found. Make sure the file has an Order ID column.");
+        return;
+      }
+
+      const statusCol = (row: CSVRow & { status?: string }) =>
+        (["Paid","Missing","Returned/Canceled","Flag"].includes(row.status ?? "") ? row.status : "Paid") as ReconStatus;
+
+      const orders: Order[] = rows.map(r => ({
+        id:       r.id,
+        product:  r.product,
+        date:     r.date,
+        commBase: r.gmv,
+        estComm:  r.commission,
+        status:   statusCol(r as any),
+      }));
+
+      setPendingOrders(orders);
+    } catch (err: any) {
+      setCsvImportError(err.message ?? "Failed to parse file.");
+    } finally {
+      if (csvXlsxRef.current) csvXlsxRef.current.value = "";
+    }
+  }
+
   // CSV parsing
   function parseCSVText(text: string): CSVRow[] {
     const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
@@ -576,6 +655,7 @@ export default function OrdersPage() {
       <input ref={ordersRef}      type="file" accept="image/*" className="hidden" onChange={onOCRFileChange} />
       <input ref={settledRef}     type="file" accept="image/*" className="hidden" onChange={onOCRFileChange} />
       <input ref={earningsOcrRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleEarningsOCR(f); e.target.value = ""; }} />
+      <input ref={csvXlsxRef}     type="file" accept=".csv,.xls,.xlsx" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleCsvXlsxImport(f); e.target.value = ""; }} />
 
       {manualOpen && (
         <ManualOrderModal
@@ -629,8 +709,25 @@ export default function OrdersPage() {
           >
             <RefreshCw className="h-4 w-4" /> Upload Settled
           </button>
+          <button
+            onClick={() => csvXlsxRef.current?.click()}
+            disabled={uploadingOrders}
+            className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-all shadow-sm disabled:opacity-60"
+          >
+            <FileSpreadsheet className="h-4 w-4" /> Import CSV / Excel
+          </button>
         </div>
       </div>
+
+      {/* CSV/Excel import error */}
+      {csvImportError && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-xs font-medium text-red-600">{csvImportError}</p>
+          <button onClick={() => setCsvImportError(null)} className="text-red-400 hover:text-red-600 shrink-0">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Pending Review UI */}
       {pendingOrders && (
