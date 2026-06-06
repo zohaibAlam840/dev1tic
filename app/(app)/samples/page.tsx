@@ -259,7 +259,7 @@ function SampleModal({
 }
 
 export default function SamplesPage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [samples,     setSamples]     = useState<Sample[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [view,        setView]        = useState<SView>("All");
@@ -278,9 +278,10 @@ export default function SamplesPage() {
   const videoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!profile) return;
+    if (authLoading) return;
+    if (!profile) { setLoading(false); return; }
     fetchSamples();
-  }, [profile]);
+  }, [profile, authLoading]);
 
   useEffect(() => {
     if (!menuOpen) return;

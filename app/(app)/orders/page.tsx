@@ -239,7 +239,7 @@ export default function OrdersPage() {
   const [tab,          setTab]          = useState<Tab>("reconciliation");
   const [statusMenu,   setStatusMenu]   = useState<string | null>(null);
 
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const userId = profile?.uid;
 
   const [systemOrders,    setSystemOrders]    = useState<Order[]>([]);
@@ -259,7 +259,8 @@ export default function OrdersPage() {
 
   // Initial Fetch from Firestore
   useEffect(() => {
-    if (!userId) return;
+    if (authLoading) return;
+    if (!userId) { setLoadingOrders(false); return; }
     async function fetchOrders() {
       try {
         const res = await fetch("/api/orders");
@@ -272,7 +273,7 @@ export default function OrdersPage() {
       }
     }
     fetchOrders();
-  }, [userId]);
+  }, [userId, authLoading]);
 
   // Earnings state
   const [earnings,        setEarnings]        = useState<EarningsRecord[]>([]);

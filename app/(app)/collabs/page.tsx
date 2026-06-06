@@ -190,7 +190,7 @@ function CollabModal({
 }
 
 export default function CollabsPage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [collabs, setCollabs] = useState<Collab[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"list" | "board">("list");
@@ -205,9 +205,10 @@ export default function CollabsPage() {
   const dragId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!profile) return;
+    if (authLoading) return;
+    if (!profile) { setLoading(false); return; }
     fetchCollabs();
-  }, [profile]);
+  }, [profile, authLoading]);
 
   // Close context menu on outside click
   useEffect(() => {

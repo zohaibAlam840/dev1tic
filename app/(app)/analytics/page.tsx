@@ -137,7 +137,7 @@ function ManualAnalyticsModal({
 }
 
 export default function AnalyticsPage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [range,    setRange]   = useState("7D");
   const [metric,   setMetric]  = useState<"gmv" | "items" | "commission">("gmv");
 
@@ -156,7 +156,8 @@ export default function AnalyticsPage() {
 
   // Load saved analytics from Firestore on mount
   useEffect(() => {
-    if (!profile) return;
+    if (authLoading) return;
+    if (!profile) { setLoadingData(false); return; }
     async function load() {
       try {
         const res  = await fetch("/api/analytics");
@@ -172,7 +173,7 @@ export default function AnalyticsPage() {
       }
     }
     load();
-  }, [profile]);
+  }, [profile, authLoading]);
 
   // ── Firestore save helpers ───────────────────────────────────────────────
   async function saveDaily(row: DailyRow) {

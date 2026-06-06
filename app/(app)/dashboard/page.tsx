@@ -42,7 +42,7 @@ function StatSkeleton() {
 }
 
 export default function DashboardPage() {
-  const { profile }  = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const firstName    = profile?.name?.split(" ")[0] ?? "there";
   const isAdmin      = profile?.role === "admin";
 
@@ -53,13 +53,14 @@ export default function DashboardPage() {
 
   // Fetch aggregated dashboard stats
   useEffect(() => {
-    if (!profile) return;
+    if (authLoading) return;
+    if (!profile) { setLoadingDash(false); return; }
     fetch("/api/dashboard")
       .then(r => r.json())
       .then(json => { if (!json.error) setData(json); })
       .catch(err => console.error("[dashboard fetch]", err))
       .finally(() => setLoadingDash(false));
-  }, [profile]);
+  }, [profile, authLoading]);
 
   // Creator: fetch workspace name + owner from the account doc
   useEffect(() => {
