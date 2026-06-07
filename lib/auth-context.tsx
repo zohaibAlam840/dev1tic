@@ -34,17 +34,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        const snap = await getDoc(doc(db, "users", firebaseUser.uid));
-        if (snap.exists()) {
-          setProfile({ uid: firebaseUser.uid, ...snap.data() } as UserProfile);
+      try {
+        if (firebaseUser) {
+          setUser(firebaseUser);
+          const snap = await getDoc(doc(db, "users", firebaseUser.uid));
+          if (snap.exists()) {
+            setProfile({ uid: firebaseUser.uid, ...snap.data() } as UserProfile);
+          }
+        } else {
+          setUser(null);
+          setProfile(null);
         }
-      } else {
-        setUser(null);
-        setProfile(null);
+      } catch (err) {
+        console.error("[auth] Failed to load user profile:", err);
+        // Release loading even on Firestore permission errors
+        // so pages don't spin forever
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return () => unsubscribe();
   }, []);

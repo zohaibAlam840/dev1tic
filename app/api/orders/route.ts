@@ -62,6 +62,38 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function DELETE(req: NextRequest) {
+  const caller = await getCallerProfile(req);
+  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (caller.role !== "admin") return NextResponse.json({ error: "Admin only" }, { status: 403 });
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const id  = searchParams.get("id");
+    const all = searchParams.get("all");
+
+    if (all === "true") {
+      // Delete all orders belonging to this user
+      const snap = await adminDb.collection("orders").where("userId", "==", caller.uid).get();
+      if (snap.empty) return NextResponse.json({ success: true, deleted: 0 });
+      const batch = adminDb.batch();
+      snap.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      return NextResponse.json({ success: true, deleted: snap.size });
+    }
+
+    if (id) {
+      await adminDb.collection("orders").doc(`${caller.uid}_${id}`).delete();
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ error: "Provide ?id= or ?all=true" }, { status: 400 });
+  } catch (err: any) {
+    console.error("[orders_delete]", err);
+    return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
+  }
+}
+
 export async function PATCH(req: NextRequest) {
   const caller = await getCallerProfile(req);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

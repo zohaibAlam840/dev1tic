@@ -6,7 +6,7 @@ import {
   Upload, Search, Download, CheckCircle2, XCircle,
   AlertTriangle, Clock, Flag, RefreshCw, ChevronDown,
   ShoppingBag, DollarSign, FileSpreadsheet, AlertCircle,
-  CheckCheck, HelpCircle, ArrowUpDown, X, ImageIcon, Plus,
+  CheckCheck, HelpCircle, ArrowUpDown, X, ImageIcon, Plus, Trash2,
 } from "lucide-react";
 
 type ReconStatus = "Paid" | "Missing" | "Returned/Canceled" | "Flag";
@@ -240,7 +240,8 @@ export default function OrdersPage() {
   const [statusMenu,   setStatusMenu]   = useState<string | null>(null);
 
   const { profile, loading: authLoading } = useAuth();
-  const userId = profile?.uid;
+  const userId  = profile?.uid;
+  const isAdmin = profile?.role === "admin";
 
   const [systemOrders,    setSystemOrders]    = useState<Order[]>([]);
   const [pendingOrders,  setPendingOrders]  = useState<Order[] | null>(null);
@@ -293,23 +294,42 @@ export default function OrdersPage() {
   const [wdFormOpen,         setWdFormOpen]         = useState(false);
   const [wdSaving,           setWdSaving]           = useState(false);
 
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
+  const [deletingAll,      setDeletingAll]      = useState(false);
+
+  async function deleteOrder(orderId: string) {
+    setSystemOrders(prev => prev.filter(o => o.id !== orderId));
+    await fetch(`/api/orders?id=${encodeURIComponent(orderId)}`, { method: "DELETE" });
+  }
+
+  async function deleteAllOrders() {
+    setDeletingAll(true);
+    try {
+      await fetch("/api/orders?all=true", { method: "DELETE" });
+      setSystemOrders([]);
+      setDeleteAllConfirm(false);
+    } finally {
+      setDeletingAll(false);
+    }
+  }
+
   const ordersRef   = useRef<HTMLInputElement>(null);
   const settledRef  = useRef<HTMLInputElement>(null);
   const csvXlsxRef  = useRef<HTMLInputElement>(null);
   const [csvImportError, setCsvImportError] = useState<string | null>(null);
 
-  // Fetch earnings when tab opens
+  // Fetch earnings when tab opens (also needed for reconciliation)
   useEffect(() => {
-    if (tab !== "earnings" || !userId || earnings.length > 0) return;
+    if ((tab !== "earnings" && tab !== "reconciliation") || !userId || earnings.length > 0) return;
     setEarningsLoading(true);
     fetch("/api/earnings").then(r => r.json()).then(d => {
       if (d.earnings) setEarnings(d.earnings);
     }).finally(() => setEarningsLoading(false));
   }, [tab, userId]);
 
-  // Fetch withdrawals when tab opens
+  // Fetch withdrawals when tab opens (also needed for reconciliation)
   useEffect(() => {
-    if (tab !== "withdrawals" || !userId || withdrawals.length > 0) return;
+    if ((tab !== "withdrawals" && tab !== "reconciliation") || !userId || withdrawals.length > 0) return;
     setWithdrawalsLoading(true);
     fetch("/api/withdrawals").then(r => r.json()).then(d => {
       if (d.withdrawals) setWithdrawals(d.withdrawals);
@@ -433,6 +453,17 @@ export default function OrdersPage() {
   const notInCSVCount = compareResults.filter(r => r.result === "not_in_csv").length;
   const filteredResults = compareResults.filter(r => resultFilter === "all" || r.result === resultFilter);
 
+  // Reconciliation computed values
+  const reconPaidOrders      = systemOrders.filter(o => o.status === "Paid");
+  const reconMissingOrders   = systemOrders.filter(o => o.status === "Missing");
+  const reconFlaggedOrders   = systemOrders.filter(o => o.status === "Flag");
+  const reconCancelledOrders = systemOrders.filter(o => o.status === "Returned/Canceled");
+  const earningsTotal        = earnings.reduce((s, e) => s + e.amount, 0);
+  const withdrawalsTotal     = withdrawals.reduce((s, w) => s + w.amount, 0);
+  const reconGap             = totalComm - earningsTotal; // positive = creator is owed money
+  const reconBalance         = earningsTotal - withdrawalsTotal;
+  const missingCommTotal     = reconMissingOrders.reduce((s, o) => s + o.estComm, 0);
+
   // OCR upload handler
   async function handleOCRUpload(file: File) {
     setUploadingOrders(true);
@@ -529,21 +560,38 @@ export default function OrdersPage() {
 
         // Normalise column names the same way parseCSVText does
         function col(row: Record<string, any>, ...candidates: string[]): string {
+          const keys = Object.keys(row);
           for (const c of candidates) {
-            const key = Object.keys(row).find(k => k.trim().toLowerCase() === c);
+            const key = keys.find(k => k.trim().toLowerCase() === c);
             if (key !== undefined && row[key] !== undefined && row[key] !== "") {
               return String(row[key]).trim();
             }
           }
           return "";
         }
+        function colFuzzy(row: Record<string, any>, test: (h: string) => boolean): string {
+          const key = Object.keys(row).find(k => test(k.trim().toLowerCase()));
+          if (key !== undefined && row[key] !== undefined && row[key] !== "") return String(row[key]).trim();
+          return "";
+        }
 
         rows = raw.map(row => {
           const id      = col(row, "order id", "orderid", "order_id", "id");
           const product = col(row, "product name", "productname", "product_name", "item name", "sku name", "product");
-          const dateRaw = col(row, "order create time", "order date", "date", "created at", "order_date");
-          const gmvRaw  = col(row, "gmv", "settlement amount", "order amount", "total amount", "commission base amount", "item price");
-          const commRaw = col(row, "estimated commission", "commission", "est. commission", "estimated_commission");
+          const dateRaw = col(row, "order create time", "order date", "date", "created at", "order_date", "order create date");
+          const gmvRaw  = col(row,
+            "gmv", "settlement amount", "order amount", "total amount", "commission base amount", "item price",
+            "revenue w/ gmv", "revenue w/gmv", "gmv amount", "order value", "actual gmv",
+            "product revenue", "net sales", "sale amount", "order gmv", "revenue"
+          ) || colFuzzy(row, h => h.includes("gmv") && !h.includes("est"));
+          const commRaw = col(row,
+            "estimated commission", "commission", "est. commission", "estimated_commission",
+            "est. comm.", "est. comm", "est.comm.", "est.comm",
+            "est commission", "estimated comm.", "estimated comm",
+            "creator commission", "affiliate commission",
+            "commission amount", "commission income", "commission earned",
+            "actual commission", "commission fee", "net commission"
+          ) || colFuzzy(row, h => (h.includes("est") && h.includes("comm")) && !h.includes("base"));
           return {
             id:         id      || `IMPORT-${Math.random().toString(36).slice(2,8).toUpperCase()}`,
             product:    product || "—",
@@ -592,6 +640,11 @@ export default function OrdersPage() {
       }
       return "";
     }
+    function colFuzzy(row: string[], test: (h: string) => boolean): string {
+      const idx = headers.findIndex(test);
+      if (idx !== -1 && row[idx] !== undefined) return row[idx].replace(/['"]/g, "").trim();
+      return "";
+    }
 
     const rows: CSVRow[] = [];
     for (let i = 1; i < lines.length; i++) {
@@ -600,9 +653,20 @@ export default function OrdersPage() {
       const id = col(row, "order id", "orderid", "order_id", "id");
       if (!id) continue;
       const product = col(row, "product name", "productname", "product_name", "item name", "sku name");
-      const dateRaw = col(row, "order create time", "order date", "date", "created at", "order_date");
-      const gmvRaw  = col(row, "gmv", "settlement amount", "order amount", "total amount", "commission base amount", "item price");
-      const commRaw = col(row, "estimated commission", "commission", "est. commission", "estimated_commission");
+      const dateRaw = col(row, "order create time", "order date", "date", "created at", "order_date", "order create date");
+      const gmvRaw  = col(row,
+        "gmv", "settlement amount", "order amount", "total amount", "commission base amount", "item price",
+        "revenue w/ gmv", "revenue w/gmv", "gmv amount", "order value", "actual gmv",
+        "product revenue", "net sales", "sale amount", "order gmv", "revenue"
+      ) || colFuzzy(row, h => h.includes("gmv") && !h.includes("est"));
+      const commRaw = col(row,
+        "estimated commission", "commission", "est. commission", "estimated_commission",
+        "est. comm.", "est. comm", "est.comm.", "est.comm",
+        "est commission", "estimated comm.", "estimated comm",
+        "creator commission", "affiliate commission",
+        "commission amount", "commission income", "commission earned",
+        "actual commission", "commission fee", "net commission"
+      ) || colFuzzy(row, h => (h.includes("est") && h.includes("comm")) && !h.includes("base"));
       rows.push({
         id,
         product: product || "—",
@@ -676,6 +740,39 @@ export default function OrdersPage() {
         />
       )}
 
+      {/* Delete All confirmation modal */}
+      {deleteAllConfirm && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setDeleteAllConfirm(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+            <div className="w-full max-w-sm bg-white rounded-3xl border border-gray-200 shadow-2xl p-6 text-center">
+              <div className="h-14 w-14 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="h-6 w-6 text-red-500" />
+              </div>
+              <h2 className="text-base font-bold text-gray-900 mb-1">Delete all orders?</h2>
+              <p className="text-sm text-gray-500 mb-6">
+                This will permanently delete all <span className="font-semibold text-gray-900">{systemOrders.length} orders</span>. This cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteAllConfirm(false)}
+                  className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={deleteAllOrders}
+                  disabled={deletingAll}
+                  className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60 transition-all"
+                >
+                  {deletingAll ? "Deleting…" : "Yes, delete all"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Import banner */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-2xl border border-violet-200 bg-violet-50 p-5">
         <div className="h-12 w-12 shrink-0 rounded-2xl bg-violet-100 flex items-center justify-center">
@@ -717,6 +814,14 @@ export default function OrdersPage() {
           >
             <FileSpreadsheet className="h-4 w-4" /> Import CSV / Excel
           </button>
+          {isAdmin && systemOrders.length > 0 && (
+            <button
+              onClick={() => setDeleteAllConfirm(true)}
+              className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-all shadow-sm"
+            >
+              <Trash2 className="h-4 w-4" /> Delete All
+            </button>
+          )}
         </div>
       </div>
 
@@ -851,6 +956,281 @@ export default function OrdersPage() {
           </button>
         ))}
       </div>
+
+      {/* ── RECONCILIATION TAB ── */}
+      {tab === "reconciliation" && (
+        <div className="space-y-5">
+          {/* Loading data */}
+          {(earningsLoading || withdrawalsLoading) && (
+            <div className="flex items-center gap-2.5 rounded-2xl border border-violet-200 bg-violet-50 px-5 py-3">
+              <span className="h-4 w-4 rounded-full border-2 border-violet-400 border-t-transparent animate-spin shrink-0" />
+              <span className="text-sm text-violet-700 font-medium">Loading reconciliation data…</span>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {systemOrders.length === 0 && !loadingOrders ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center rounded-2xl border border-dashed border-gray-300 bg-white">
+              <div className="h-16 w-16 rounded-2xl bg-violet-50 border border-violet-100 flex items-center justify-center mb-5">
+                <CheckCheck className="h-8 w-8 text-violet-300" />
+              </div>
+              <h3 className="text-base font-bold text-gray-900 mb-2">No orders to reconcile</h3>
+              <p className="text-sm text-gray-400 max-w-xs leading-relaxed">
+                Import your TikTok Shop orders first, then come back here to see your full payout reconciliation.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* ── KPI Summary ── */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 mb-2" />
+                  <div className="text-2xl font-bold text-emerald-700">${totalComm.toFixed(2)}</div>
+                  <div className="text-xs font-semibold text-gray-700 mt-0.5">Expected Commission</div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">{reconPaidOrders.length} settled orders</div>
+                </div>
+                <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                  <DollarSign className="h-4 w-4 text-violet-500 mb-2" />
+                  <div className="text-2xl font-bold text-violet-700">${earningsTotal.toFixed(2)}</div>
+                  <div className="text-xs font-semibold text-gray-700 mt-0.5">Earnings Recorded</div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">{earnings.length} {earnings.length === 1 ? "entry" : "entries"}</div>
+                </div>
+                <div className={clsx("rounded-2xl border p-4",
+                  reconGap > 0.01  ? "border-red-200 bg-red-50"     :
+                  reconGap < -0.01 ? "border-blue-200 bg-blue-50"   :
+                                     "border-emerald-200 bg-emerald-50"
+                )}>
+                  {reconGap > 0.01  ? <AlertTriangle className="h-4 w-4 text-red-500 mb-2" />     :
+                   reconGap < -0.01 ? <DollarSign    className="h-4 w-4 text-blue-500 mb-2" />   :
+                                      <CheckCheck    className="h-4 w-4 text-emerald-500 mb-2" />}
+                  <div className={clsx("text-2xl font-bold",
+                    reconGap > 0.01  ? "text-red-700"     :
+                    reconGap < -0.01 ? "text-blue-700"    :
+                                       "text-emerald-700"
+                  )}>${Math.abs(reconGap).toFixed(2)}</div>
+                  <div className="text-xs font-semibold text-gray-700 mt-0.5">
+                    {reconGap > 0.01 ? "Earnings Gap" : reconGap < -0.01 ? "Extra Income" : "Fully Reconciled"}
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">
+                    {reconGap > 0.01 ? "not yet in earnings" : reconGap < -0.01 ? "non-order earnings" : "all accounted for"}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <Download className="h-4 w-4 text-amber-500 mb-2" />
+                  <div className={clsx("text-2xl font-bold", reconBalance >= 0 ? "text-amber-700" : "text-red-700")}>
+                    ${reconBalance.toFixed(2)}
+                  </div>
+                  <div className="text-xs font-semibold text-gray-700 mt-0.5">Available Balance</div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">${withdrawalsTotal.toFixed(2)} withdrawn</div>
+                </div>
+              </div>
+
+              {/* ── Alerts ── */}
+              <div className="space-y-2">
+                {reconGap > 0.01 && (
+                  <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5">
+                    <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-red-700">
+                        ${reconGap.toFixed(2)} gap — your settled orders should have earned ${totalComm.toFixed(2)} but only ${earningsTotal.toFixed(2)} is recorded.
+                      </p>
+                      <p className="text-xs text-red-600 mt-0.5">
+                        Log missing payouts in the Earnings tab, or chase TikTok Shop if commission hasn&apos;t been disbursed yet.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {reconMissingOrders.length > 0 && (
+                  <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+                    <Clock className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-amber-700">
+                        {reconMissingOrders.length} order{reconMissingOrders.length !== 1 ? "s" : ""} haven&apos;t settled
+                        {missingCommTotal > 0 ? ` — $${missingCommTotal.toFixed(2)} in potential commission at risk` : ""}.
+                      </p>
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        These orders exist but have no settlement confirmation. Follow up with TikTok Shop if they&apos;re overdue.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {reconFlaggedOrders.length > 0 && (
+                  <div className="flex items-start gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3.5">
+                    <Flag className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-orange-700">
+                        {reconFlaggedOrders.length} order{reconFlaggedOrders.length !== 1 ? "s" : ""} flagged — verify these before counting their commission.
+                      </p>
+                      <p className="text-xs text-orange-600 mt-0.5">
+                        Use the Orders tab to update their status once confirmed.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {reconGap <= 0.01 && reconMissingOrders.length === 0 && reconFlaggedOrders.length === 0 && earnings.length > 0 && (
+                  <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3.5">
+                    <CheckCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <p className="text-sm font-bold text-emerald-700">All good — earnings match expected commission with no missing or flagged orders.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Order Breakdown ── */}
+              <div>
+                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Order Breakdown</div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {([
+                    { label: "Settled",   status: "Paid"               as ReconStatus, orders: reconPaidOrders,      color: "emerald" },
+                    { label: "Missing",   status: "Missing"            as ReconStatus, orders: reconMissingOrders,   color: "amber"   },
+                    { label: "Cancelled", status: "Returned/Canceled"  as ReconStatus, orders: reconCancelledOrders, color: "red"     },
+                    { label: "Flagged",   status: "Flag"               as ReconStatus, orders: reconFlaggedOrders,   color: "orange"  },
+                  ]).map(({ label, status, orders, color }) => {
+                    const Icon = STATUS_ICONS[status];
+                    const comm = orders.reduce((s, o) => s + o.estComm, 0);
+                    const styles: Record<string, { card: string; icon: string }> = {
+                      emerald: { card: "border-emerald-200 bg-emerald-50", icon: "text-emerald-500" },
+                      amber:   { card: "border-amber-200   bg-amber-50",   icon: "text-amber-500"   },
+                      red:     { card: "border-red-200     bg-red-50",     icon: "text-red-500"     },
+                      orange:  { card: "border-orange-200  bg-orange-50",  icon: "text-orange-500"  },
+                    };
+                    return (
+                      <div key={label} className={clsx("rounded-2xl border p-4", styles[color].card)}>
+                        <div className="flex items-center justify-between mb-2">
+                          <Icon className={clsx("h-4 w-4", styles[color].icon)} />
+                          <span className="text-2xl font-bold text-gray-900">{orders.length}</span>
+                        </div>
+                        <div className="text-xs font-semibold text-gray-700">{label} Orders</div>
+                        <div className={clsx("text-[10px] mt-0.5", styles[color].icon)}>
+                          {status === "Returned/Canceled" ? "not eligible for commission" :
+                           comm > 0 ? `$${comm.toFixed(2)} commission` : "no commission data"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── Earnings Breakdown ── */}
+              {earnings.length > 0 && (
+                <div>
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Earnings Breakdown</div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {EARNINGS_TYPES.map(type => {
+                      const filtered = earnings.filter(e => e.type === type);
+                      const total    = filtered.reduce((s, e) => s + e.amount, 0);
+                      const typeStyle: Record<string, string> = {
+                        "Daily Revenue": "border-emerald-200 bg-emerald-50 text-emerald-700",
+                        "Flat Fee":      "border-blue-200   bg-blue-50   text-blue-700",
+                        "Rewards":       "border-violet-200 bg-violet-50 text-violet-700",
+                      };
+                      return (
+                        <div key={type} className={clsx("rounded-2xl border p-4", typeStyle[type])}>
+                          <div className="text-xl font-bold mb-0.5">${total.toFixed(2)}</div>
+                          <div className="text-xs font-semibold opacity-80">{type}</div>
+                          <div className="text-[10px] opacity-60 mt-0.5">{filtered.length} {filtered.length === 1 ? "entry" : "entries"}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Settled Orders Table ── */}
+              {reconPaidOrders.length > 0 && (
+                <div>
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                    Settled Orders <span className="text-gray-300 font-normal">({reconPaidOrders.length})</span>
+                  </div>
+                  <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[500px]">
+                        <div className="grid grid-cols-[1.2fr_2.5fr_1fr_1fr] gap-4 px-5 py-3 border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                          <div>Order ID</div><div>Product</div><div>Date</div><div>Commission</div>
+                        </div>
+                        {reconPaidOrders.slice(0, 100).map(o => (
+                          <div key={o.id} className="grid grid-cols-[1.2fr_2.5fr_1fr_1fr] gap-4 px-5 py-3.5 border-b border-gray-100 hover:bg-gray-50 transition-all items-center last:border-0">
+                            <div className="text-xs font-mono text-violet-600 font-semibold truncate">{o.id}</div>
+                            <div className="text-sm text-gray-900 truncate">{o.product}</div>
+                            <div className="text-xs text-gray-500">{o.date}</div>
+                            <div className="text-sm font-semibold text-emerald-600">+${o.estComm.toFixed(2)}</div>
+                          </div>
+                        ))}
+                        {reconPaidOrders.length > 100 && (
+                          <div className="px-5 py-2.5 text-xs text-gray-400 text-center border-t border-gray-100">
+                            Showing first 100 of {reconPaidOrders.length} settled orders
+                          </div>
+                        )}
+                        <div className="grid grid-cols-[1.2fr_2.5fr_1fr_1fr] gap-4 px-5 py-3 border-t-2 border-gray-200 bg-gray-50">
+                          <div className="col-span-3 text-xs font-bold text-gray-600">Total Expected Commission</div>
+                          <div className="text-sm font-bold text-emerald-600">${totalComm.toFixed(2)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Missing Orders ── */}
+              {reconMissingOrders.length > 0 && (
+                <div>
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                    Missing / Unsettled Orders <span className="text-gray-300 font-normal">({reconMissingOrders.length})</span>
+                  </div>
+                  <div className="rounded-2xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[500px]">
+                        <div className="grid grid-cols-[1.2fr_2.5fr_1fr_1fr] gap-4 px-5 py-3 border-b border-amber-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                          <div>Order ID</div><div>Product</div><div>Date</div><div>Potential Comm.</div>
+                        </div>
+                        {reconMissingOrders.map(o => (
+                          <div key={o.id} className="grid grid-cols-[1.2fr_2.5fr_1fr_1fr] gap-4 px-5 py-3.5 border-b border-amber-50 hover:bg-amber-50/40 transition-all items-center last:border-0">
+                            <div className="text-xs font-mono text-violet-600 font-semibold truncate">{o.id}</div>
+                            <div className="text-sm text-gray-900 truncate">{o.product}</div>
+                            <div className="text-xs text-gray-500">{o.date}</div>
+                            <div className="text-sm font-semibold text-amber-600">${o.estComm.toFixed(2)}</div>
+                          </div>
+                        ))}
+                        {missingCommTotal > 0 && (
+                          <div className="grid grid-cols-[1.2fr_2.5fr_1fr_1fr] gap-4 px-5 py-3 border-t-2 border-amber-200 bg-amber-50">
+                            <div className="col-span-3 text-xs font-bold text-gray-600">Total At Risk</div>
+                            <div className="text-sm font-bold text-amber-600">${missingCommTotal.toFixed(2)}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Flagged Orders ── */}
+              {reconFlaggedOrders.length > 0 && (
+                <div>
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                    Flagged Orders <span className="text-gray-300 font-normal">({reconFlaggedOrders.length})</span>
+                  </div>
+                  <div className="rounded-2xl border border-orange-200 bg-white shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[500px]">
+                        <div className="grid grid-cols-[1.2fr_2.5fr_1fr_1fr] gap-4 px-5 py-3 border-b border-orange-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                          <div>Order ID</div><div>Product</div><div>Date</div><div>Est. Comm.</div>
+                        </div>
+                        {reconFlaggedOrders.map(o => (
+                          <div key={o.id} className="grid grid-cols-[1.2fr_2.5fr_1fr_1fr] gap-4 px-5 py-3.5 border-b border-orange-50 hover:bg-orange-50/40 transition-all items-center last:border-0">
+                            <div className="text-xs font-mono text-violet-600 font-semibold truncate">{o.id}</div>
+                            <div className="text-sm text-gray-900 truncate">{o.product}</div>
+                            <div className="text-xs text-gray-500">{o.date}</div>
+                            <div className="text-sm font-semibold text-orange-600">${o.estComm.toFixed(2)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── EARNINGS TAB ── */}
       {tab === "earnings" && (
@@ -1267,8 +1647,8 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* ── OTHER TABS ── */}
-      {tab !== "csv-check" && (
+      {/* ── ORDERS / SETTLED / INELIGIBLE TABS ── */}
+      {(tab === "orders" || tab === "settled" || tab === "ineligible") && (
         <>
           {systemOrders.length === 0 ? (
             /* Empty state — no orders uploaded yet */
@@ -1369,7 +1749,17 @@ export default function OrdersPage() {
                               </div>
                             )}
                           </div>
-                          <div />
+                          {isAdmin ? (
+                            <button
+                              onClick={() => deleteOrder(o.id)}
+                              className="p-1.5 rounded-lg hover:bg-red-50 transition-colors group"
+                              title="Delete order"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-gray-300 group-hover:text-red-400 transition-colors" />
+                            </button>
+                          ) : (
+                            <div />
+                          )}
                         </div>
                       );
                     })}
